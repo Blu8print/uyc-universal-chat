@@ -1,6 +1,6 @@
 # my_flutter_app
 
-A new Flutter project.
+Kwaaijongens APP
 
 ## Getting Started
 
