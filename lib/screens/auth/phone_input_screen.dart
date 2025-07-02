@@ -11,6 +11,7 @@ class PhoneInputScreen extends StatefulWidget {
 }
 
 class _PhoneInputScreenState extends State<PhoneInputScreen> {
+  final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _countryCodeController = TextEditingController(text: '+31');
   bool _isLoading = false;
@@ -18,6 +19,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _phoneController.dispose();
     _countryCodeController.dispose();
     super.dispose();
@@ -39,10 +41,18 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     return phone.length >= 9 && phone.length <= 10 && phone.startsWith('06');
   }
 
+  bool _isValidInput() {
+    return _nameController.text.trim().isNotEmpty && _isValidPhoneNumber();
+  }
+
   Future<void> _sendSmsCode() async {
-    if (!_isValidPhoneNumber()) {
+    if (!_isValidInput()) {
       setState(() {
-        _errorMessage = 'Voer een geldig Nederlands mobiel nummer in (06xxxxxxxx)';
+        if (_nameController.text.trim().isEmpty) {
+          _errorMessage = 'Voer je naam in';
+        } else if (!_isValidPhoneNumber()) {
+          _errorMessage = 'Voer een geldig Nederlands mobiel nummer in (06xxxxxxxx)';
+        }
       });
       return;
     }
@@ -67,6 +77,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           MaterialPageRoute(
             builder: (context) => SmsVerificationScreen(
               phoneNumber: fullPhoneNumber,
+              name: _nameController.text.trim(),
             ),
           ),
         );
@@ -83,12 +94,19 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height - 
+                           MediaQuery.of(context).padding.top - 
+                           MediaQuery.of(context).padding.bottom - 48, // Account for padding
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
               // Logo/Title
               const Icon(
                 Icons.phone_android,
@@ -107,7 +125,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Voer je telefoonnummer in om te beginnen',
+                'Voer je gegevens in om te beginnen',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
@@ -115,6 +133,28 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 ),
               ),
               const SizedBox(height: 48),
+              
+              // Name input
+              TextField(
+                controller: _nameController,
+                textCapitalization: TextCapitalization.words,
+                style: const TextStyle(fontSize: 16),
+                maxLines: 1,
+                decoration: const InputDecoration(
+                  labelText: 'Je naam',
+                  hintText: 'Voor- en achternaam',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                ),
+                onChanged: (value) {
+                  if (_errorMessage != null) {
+                    setState(() {
+                      _errorMessage = null;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
               
               // Phone number input
               Row(
@@ -127,6 +167,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       keyboardType: TextInputType.phone,
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 16),
+                      maxLines: 1,
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
@@ -144,6 +185,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                         LengthLimitingTextInputFormatter(10),
                       ],
                       style: const TextStyle(fontSize: 16),
+                      maxLines: 1,
                       decoration: const InputDecoration(
                         hintText: '06 12345678',
                         border: OutlineInputBorder(),
@@ -268,6 +310,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }
