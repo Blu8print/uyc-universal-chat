@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../services/auth_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -44,13 +45,27 @@ class _ChatScreenState extends State<ChatScreen> {
   
   final String _n8nChatUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
   
-  final List<ChatMessage> _messages = [
-    ChatMessage(
-      text: "Hallo! Ik ben je AI-assistent van Kwaaijongens. Ik help je graag met je blog ideeën en content creatie. Waar kan ik je mee helpen?",
-      isCustomer: false,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
-    ),
-  ];
+  final List<ChatMessage> _messages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeWelcomeMessage();
+  }
+
+  void _initializeWelcomeMessage() {
+    final user = AuthService.currentUser;
+    final userName = user?.name ?? 'daar';
+    final companyName = user?.companyName ?? 'je bedrijf';
+    
+    setState(() {
+      _messages.add(ChatMessage(
+        text: "Hallo $userName! Ik ben je AI-assistent van Kwaaijongens. Ik help $companyName graag met blog ideeën en content creatie. Waar kan ik je mee helpen?",
+        isCustomer: false,
+        timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
+      ));
+    });
+  }
 
   @override
   void dispose() {
