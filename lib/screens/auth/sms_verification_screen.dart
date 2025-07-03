@@ -5,10 +5,12 @@ import '../../screens/chat_screen.dart';
 
 class SmsVerificationScreen extends StatefulWidget {
   final String phoneNumber;
+  final String name;
 
   const SmsVerificationScreen({
     super.key,
     required this.phoneNumber,
+    required this.name,
   });
 
   @override
@@ -16,7 +18,6 @@ class SmsVerificationScreen extends StatefulWidget {
 }
 
 class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
-  final TextEditingController _nameController = TextEditingController();
   final TextEditingController _codeController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
@@ -24,20 +25,18 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
     _codeController.dispose();
     super.dispose();
   }
 
   bool _isValidInput() {
-    return _nameController.text.trim().isNotEmpty &&
-           _codeController.text.trim().length >= 4;
+    return _codeController.text.trim().length >= 4;
   }
 
   Future<void> _verifyCode() async {
     if (!_isValidInput()) {
       setState(() {
-        _errorMessage = 'Vul je naam en verificatiecode in';
+        _errorMessage = 'Vul de verificatiecode in';
       });
       return;
     }
@@ -49,7 +48,7 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
 
     final response = await AuthService.verifyAndRegister(
       phoneNumber: widget.phoneNumber,
-      name: _nameController.text.trim(),
+      name: widget.name,
       smsCode: _codeController.text.trim(),
     );
 
@@ -159,29 +158,17 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
                     color: Color(0xFFCC0001),
                   ),
                 ),
-                const SizedBox(height: 32),
-                
-                // Name input
-                TextField(
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
-                  style: const TextStyle(fontSize: 16),
-                  decoration: const InputDecoration(
-                    labelText: 'Je naam',
-                    hintText: 'Voor- en achternaam',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                const SizedBox(height: 8),
+                Text(
+                  'Hallo ${widget.name}!',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
                   ),
-                  onChanged: (value) {
-                    if (_errorMessage != null) {
-                      setState(() {
-                        _errorMessage = null;
-                      });
-                    }
-                  },
                 ),
-                
-                const SizedBox(height: 16),
+                const SizedBox(height: 32),
                 
                 // SMS code input
                 TextField(
@@ -192,11 +179,12 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
                     LengthLimitingTextInputFormatter(6),
                   ],
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 8,
+                    letterSpacing: MediaQuery.of(context).size.width < 360 ? 4 : 8,
                   ),
+                  maxLines: 1,
                   decoration: const InputDecoration(
                     labelText: 'Verificatiecode',
                     hintText: '123456',

@@ -60,6 +60,13 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _initializeWelcomeMessage();
+    _requestInitialPermissions();
+  }
+
+  Future<void> _requestInitialPermissions() async {
+    print('DEBUG: Requesting initial permissions...');
+    final result = await _audioService.requestPermission();
+    print('DEBUG: Initial permission result: $result');
   }
 
   void _initializeWelcomeMessage() {
@@ -201,6 +208,23 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _startRecording() async {
+    print('DEBUG: Starting recording...');
+    final hasPermission = await _audioService.requestPermission();
+    print('DEBUG: Recording permission granted: $hasPermission');
+    
+    if (!hasPermission) {
+      print('DEBUG: Permission denied, showing snackbar');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Microfoon toegang is vereist voor audio opnamen. Ga naar instellingen om dit toe te staan.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+    
     final success = await _audioService.startRecording();
     if (success) {
       setState(() {

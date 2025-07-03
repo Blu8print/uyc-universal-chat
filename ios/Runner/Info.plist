@@ -47,5 +47,16 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Deze app heeft toegang tot de microfoon nodig om audio berichten op te nemen</string>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryMicrophone</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>NSPrivacyAccessedAPIReasonMicrophoneRealTime</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
