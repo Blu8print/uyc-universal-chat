@@ -97,7 +97,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
               ),
               const SizedBox(height: 24),
               const Text(
-                'Kwaaijongens App',
+                'kwaaijongens APP',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 28,

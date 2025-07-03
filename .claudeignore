@@ -1,0 +1,43 @@
+# Flutter/Dart build artifacts
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Platform-specific directories
+android/
+ios/
+web/
+windows/
+macos/
+linux/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Coverage
+coverage/
+
+# Test artifacts
+test/coverage/
+.nyc_output/
+
+# Other
+*.iml
+*.ipr
+*.iws

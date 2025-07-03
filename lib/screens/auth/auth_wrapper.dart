@@ -52,7 +52,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
               ),
               SizedBox(height: 16),
               Text(
-                'Kwaaijongens App',
+                'kwaaijongens APP',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,

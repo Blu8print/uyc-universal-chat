@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
 import '../services/auth_service.dart';
+import '../services/audio_recording_service.dart';
+import '../widgets/audio_message_widget.dart';
 
 void main() {
   runApp(const MyApp());
@@ -13,7 +17,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Kwaaijongens App',
+      title: 'kwaaijongens APP',
       theme: ThemeData(
         primarySwatch: Colors.red,
         primaryColor: const Color(0xFFCC0001),
@@ -40,8 +44,13 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final AudioRecordingService _audioService = AudioRecordingService();
+  Timer? _recordingTimer;
+  
   bool _isTyping = false;
   bool _isLoading = false;
+  bool _isRecording = false;
+  Duration _recordingDuration = Duration.zero;
   
   final String _n8nChatUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
   
@@ -71,6 +80,8 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _audioService.dispose();
+    _recordingTimer?.cancel();
     super.dispose();
   }
 
@@ -132,9 +143,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }),
       ).timeout(const Duration(seconds: 30));
       
-      print('Response status: ${response.statusCode}');
-      print('Response body: "${response.body}"');
-      print('Response headers: ${response.headers}');
+      // Log response details for debugging
       
       if (response.statusCode == 200) {
         String botResponse = '';
@@ -176,7 +185,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _addErrorMessage('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error sending to n8n: $e');
+      // Error sending to n8n: $e
       _addErrorMessage('Sorry, er ging iets mis. Controleer je internetverbinding en probeer het opnieuw.');
     }
   }
@@ -191,6 +200,133 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _startRecording() async {
+    final success = await _audioService.startRecording();
+    if (success) {
+      setState(() {
+        _isRecording = true;
+        _recordingDuration = Duration.zero;
+      });
+      
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        setState(() {
+          _recordingDuration = Duration(seconds: timer.tick);
+        });
+      });
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kan opname niet starten. Controleer microfoon toegang.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    _recordingTimer?.cancel();
+    
+    final audioFile = await _audioService.stopRecording();
+    
+    setState(() {
+      _isRecording = false;
+      _recordingDuration = Duration.zero;
+    });
+    
+    if (audioFile != null) {
+      await _sendAudioMessage(audioFile);
+    }
+  }
+
+  Future<void> _sendAudioMessage(File audioFile) async {
+    setState(() {
+      _messages.add(
+        ChatMessage(
+          text: '🎤 Audio bericht (${_formatDuration(_recordingDuration)})',
+          isCustomer: true,
+          timestamp: DateTime.now(),
+          audioFile: audioFile,
+        ),
+      );
+      _isLoading = true;
+    });
+    
+    _scrollToBottom();
+    
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse(_n8nChatUrl),
+      );
+      
+      request.fields['action'] = 'sendAudio';
+      request.fields['sessionId'] = 'flutter_chat_${DateTime.now().millisecondsSinceEpoch ~/ 100000}';
+      
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'audio',
+          audioFile.path,
+          filename: 'audio_message.m4a',
+        ),
+      );
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200) {
+        String botResponse = '';
+        
+        if (response.body.isEmpty) {
+          botResponse = 'Lege reactie ontvangen van server';
+        } else {
+          try {
+            final data = jsonDecode(response.body);
+            if (data is Map) {
+              botResponse = data['transcription'] ??
+                           data['output'] ??
+                           data['response'] ??
+                           data['message'] ??
+                           data['text'] ??
+                           'Audio ontvangen, maar geen transcriptie beschikbaar';
+            } else if (data is String) {
+              botResponse = data;
+            } else {
+              botResponse = 'Onverwacht response format';
+            }
+          } catch (e) {
+            botResponse = response.body.isNotEmpty ? response.body : 'Ongeldige server reactie';
+          }
+        }
+        
+        setState(() {
+          _messages.add(ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      } else {
+        _addErrorMessage('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      // Error sending audio: $e
+      _addErrorMessage('Sorry, er ging iets mis bij het versturen van het audio bericht.');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+      _scrollToBottom();
+    }
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
+
   void _onTextChanged(String text) {
     setState(() {
       _isTyping = text.trim().isNotEmpty;
@@ -202,7 +338,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Kwaaijongens App',
+          'kwaaijongens APP',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 20,
@@ -228,7 +364,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         setState(() {
                           _messages.clear();
                           _messages.add(ChatMessage(
-                            text: "Hallo! Ik ben je AI-assistent van Kwaaijongens. Ik help je graag met je blog ideeën en content creatie. Waar kan ik je mee helpen?",
+                            text: "Hallo! Ik ben je AI-assistent van kwaaijongens APP. Ik help je graag met je blog ideeën en content creatie. Waar kan ik je mee helpen?",
                             isCustomer: false,
                             timestamp: DateTime.now(),
                           ));
@@ -261,6 +397,26 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
+          // Recording indicator
+          if (_isRecording)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.red.shade50,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Opnemen... ${_formatDuration(_recordingDuration)}',
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Message input
           Container(
             padding: const EdgeInsets.all(16),
@@ -331,21 +487,23 @@ class _ChatScreenState extends State<ChatScreen> {
                   // Voice or Send button
                   Container(
                     decoration: BoxDecoration(
-                      color: _isLoading ? Colors.grey : const Color(0xFFCC0001),
+                      color: _isLoading 
+                          ? Colors.grey 
+                          : (_isRecording ? Colors.red : const Color(0xFFCC0001)),
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
                       onPressed: _isLoading ? null : (_isTyping 
                           ? _sendMessage 
-                          : () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Spraakopname nog niet beschikbaar')),
-                              );
-                            }),
+                          : _isRecording
+                              ? _stopRecording
+                              : _startRecording),
                       icon: Icon(
                         _isLoading 
                             ? Icons.hourglass_empty 
-                            : (_isTyping ? Icons.send : Icons.mic),
+                            : (_isTyping 
+                                ? Icons.send 
+                                : (_isRecording ? Icons.stop : Icons.mic)),
                         color: Colors.white,
                       ),
                     ),
@@ -364,11 +522,13 @@ class ChatMessage {
   final String text;
   final bool isCustomer;
   final DateTime timestamp;
+  final File? audioFile;
 
   ChatMessage({
     required this.text,
     required this.isCustomer,
     required this.timestamp,
+    this.audioFile,
   });
 }
 
@@ -413,25 +573,34 @@ class ChatBubble extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    message.text,
-                    style: TextStyle(
-                      color: message.isCustomer 
-                          ? Colors.white 
-                          : Colors.black87,
-                      fontSize: 16,
+                  if (message.audioFile != null)
+                    AudioMessageWidget(
+                      audioFile: message.audioFile!,
+                      isCustomer: message.isCustomer,
+                      duration: message.text.replaceAll('🎤 Audio bericht (', '').replaceAll(')', ''),
+                    )
+                  else
+                    Text(
+                      message.text,
+                      style: TextStyle(
+                        color: message.isCustomer 
+                            ? Colors.white 
+                            : Colors.black87,
+                        fontSize: 16,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatTime(message.timestamp),
-                    style: TextStyle(
-                      color: message.isCustomer 
-                          ? Colors.white70 
-                          : Colors.grey.shade600,
-                      fontSize: 12,
+                  if (message.audioFile == null) ...[  
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatTime(message.timestamp),
+                      style: TextStyle(
+                        color: message.isCustomer 
+                            ? Colors.white70 
+                            : Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
