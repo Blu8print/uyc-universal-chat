@@ -47,6 +47,14 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Deze app heeft toegang tot de microfoon nodig om audio berichten op te nemen</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Deze app heeft toegang tot de camera nodig om foto's te maken voor blog content</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Deze app heeft toegang tot de fotobibliotheek nodig om afbeeldingen te selecteren</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Deze app heeft toegang tot locatie nodig om je huidige locatie te delen met de AI-assistent</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Deze app heeft toegang tot locatie nodig om je huidige locatie te delen met de AI-assistent</string>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
 		<dict>

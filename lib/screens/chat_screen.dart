@@ -3,9 +3,17 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
+import 'package:http_parser/http_parser.dart';
 import '../services/auth_service.dart';
 import '../services/audio_recording_service.dart';
+import '../services/session_service.dart';
+import '../services/attachment_service.dart';
 import '../widgets/audio_message_widget.dart';
+import '../widgets/image_message_widget.dart';
+import '../widgets/document_message_widget.dart';
+import '../widgets/location_message_widget.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   runApp(const MyApp());
@@ -45,6 +53,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final AudioRecordingService _audioService = AudioRecordingService();
+  final ImagePicker _imagePicker = ImagePicker();
   Timer? _recordingTimer;
   
   bool _isTyping = false;
@@ -59,8 +68,13 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeServices();
     _initializeWelcomeMessage();
     _requestInitialPermissions();
+  }
+
+  Future<void> _initializeServices() async {
+    await SessionService.initialize();
   }
 
   Future<void> _requestInitialPermissions() async {
@@ -142,10 +156,11 @@ class _ChatScreenState extends State<ChatScreen> {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
         },
         body: jsonEncode({
           'action': 'sendMessage',
-          'sessionId': 'flutter_chat_${DateTime.now().millisecondsSinceEpoch ~/ 100000}', // Session per ~day
+          'sessionId': SessionService.currentSessionId ?? 'no-session',
           'chatInput': message,
         }),
       ).timeout(const Duration(seconds: 30));
@@ -271,6 +286,7 @@ class _ChatScreenState extends State<ChatScreen> {
           isCustomer: true,
           timestamp: DateTime.now(),
           audioFile: audioFile,
+          attachmentType: AttachmentType.audio,
         ),
       );
       _isLoading = true;
@@ -285,7 +301,8 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       
       request.fields['action'] = 'sendAudio';
-      request.fields['sessionId'] = 'flutter_chat_${DateTime.now().millisecondsSinceEpoch ~/ 100000}';
+      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
       
       request.files.add(
         await http.MultipartFile.fromPath(
@@ -351,6 +368,457 @@ class _ChatScreenState extends State<ChatScreen> {
     return '$minutes:$seconds';
   }
 
+  Map<String, String> _getFileExtensionAndMimeType(String filePath) {
+    final extension = filePath.split('.').last.toLowerCase();
+    
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return {'extension': 'jpg', 'mimeType': 'image/jpeg'};
+      case 'png':
+        return {'extension': 'png', 'mimeType': 'image/png'};
+      case 'heic':
+        return {'extension': 'heic', 'mimeType': 'image/heic'};
+      case 'webp':
+        return {'extension': 'webp', 'mimeType': 'image/webp'};
+      case 'gif':
+        return {'extension': 'gif', 'mimeType': 'image/gif'};
+      default:
+        return {'extension': 'jpg', 'mimeType': 'image/jpeg'};
+    }
+  }
+
+  Future<void> _showAttachmentDialog() async {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Bijlage selecteren',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.description, color: Color(0xFFCC0001)),
+                title: const Text('Document'),
+                subtitle: const Text('PDF, Word, Excel, PowerPoint'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickDocument();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Color(0xFFCC0001)),
+                title: const Text('Galerij'),
+                subtitle: const Text('Foto\'s en afbeeldingen'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showImageSourceDialog();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.location_on, color: Color(0xFFCC0001)),
+                title: const Text('Locatie'),
+                subtitle: const Text('Huidige locatie delen'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareLocation();
+                },
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annuleren'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showImageSourceDialog() async {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Afbeelding selecteren',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Color(0xFFCC0001)),
+                title: const Text('Camera'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Color(0xFFCC0001)),
+                title: const Text('Galerij'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annuleren'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      // Request permissions
+      if (source == ImageSource.camera) {
+        final cameraStatus = await Permission.camera.request();
+        if (cameraStatus.isDenied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Camera toegang is vereist om foto\'s te maken.'),
+              ),
+            );
+          }
+          return;
+        }
+      } else {
+        final photosStatus = await Permission.photos.request();
+        if (photosStatus.isDenied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Galerij toegang is vereist om foto\'s te selecteren.'),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      final XFile? image = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        final imageFile = File(image.path);
+        await _sendImageMessage(imageFile);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fout bij het selecteren van afbeelding: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendImageMessage(File imageFile) async {
+    setState(() {
+      _messages.add(
+        ChatMessage(
+          text: '📷 Afbeelding',
+          isCustomer: true,
+          timestamp: DateTime.now(),
+          imageFile: imageFile,
+          attachmentType: AttachmentType.image,
+        ),
+      );
+      _isLoading = true;
+    });
+
+    _scrollToBottom();
+
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse(_n8nChatUrl),
+      );
+
+      request.fields['action'] = 'sendImage';
+      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+
+      final fileInfo = _getFileExtensionAndMimeType(imageFile.path);
+      
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'image',
+          imageFile.path,
+          filename: 'image_message.${fileInfo['extension']}',
+          contentType: MediaType.parse(fileInfo['mimeType']!),
+        ),
+      );
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        String botResponse = '';
+
+        if (response.body.isEmpty) {
+          botResponse = 'Afbeelding ontvangen, maar geen reactie van server';
+        } else {
+          try {
+            final data = jsonDecode(response.body);
+            if (data is Map) {
+              botResponse = data['description'] ??
+                           data['output'] ??
+                           data['response'] ??
+                           data['message'] ??
+                           data['text'] ??
+                           'Afbeelding ontvangen en geanalyseerd';
+            } else if (data is String) {
+              botResponse = data;
+            } else {
+              botResponse = 'Onverwacht response format';
+            }
+          } catch (e) {
+            botResponse = response.body.isNotEmpty ? response.body : 'Ongeldige server reactie';
+          }
+        }
+
+        setState(() {
+          _messages.add(ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      } else {
+        _addErrorMessage('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      _addErrorMessage('Sorry, er ging iets mis bij het versturen van de afbeelding.');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+      _scrollToBottom();
+    }
+  }
+
+  Future<void> _pickDocument() async {
+    try {
+      final documentFile = await AttachmentService.pickDocument();
+      if (documentFile != null) {
+        await _sendDocumentMessage(documentFile);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fout bij het selecteren van document: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendDocumentMessage(File documentFile) async {
+    final fileInfo = AttachmentService.getFileInfo(documentFile);
+    
+    setState(() {
+      _messages.add(
+        ChatMessage(
+          text: '📄 ${fileInfo['fileName']}',
+          isCustomer: true,
+          timestamp: DateTime.now(),
+          documentFile: documentFile,
+          attachmentType: AttachmentType.document,
+        ),
+      );
+      _isLoading = true;
+    });
+
+    _scrollToBottom();
+
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse(_n8nChatUrl),
+      );
+
+      request.fields['action'] = 'sendDocument';
+      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'document',
+          documentFile.path,
+          filename: fileInfo['fileName'],
+          contentType: MediaType.parse(fileInfo['mimeType']),
+        ),
+      );
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        String botResponse = '';
+
+        if (response.body.isEmpty) {
+          botResponse = 'Document ontvangen, maar geen reactie van server';
+        } else {
+          try {
+            final data = jsonDecode(response.body);
+            if (data is Map) {
+              botResponse = data['analysis'] ??
+                           data['output'] ??
+                           data['response'] ??
+                           data['message'] ??
+                           data['text'] ??
+                           'Document ontvangen en geanalyseerd';
+            } else if (data is String) {
+              botResponse = data;
+            } else {
+              botResponse = 'Onverwacht response format';
+            }
+          } catch (e) {
+            botResponse = response.body.isNotEmpty ? response.body : 'Ongeldige server reactie';
+          }
+        }
+
+        setState(() {
+          _messages.add(ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      } else {
+        _addErrorMessage('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      _addErrorMessage('Sorry, er ging iets mis bij het versturen van het document.');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+      _scrollToBottom();
+    }
+  }
+
+  Future<void> _shareLocation() async {
+    try {
+      final locationData = await AttachmentService.getCurrentLocation();
+      if (locationData != null) {
+        await _sendLocationMessage(locationData);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fout bij het delen van locatie: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendLocationMessage(Map<String, dynamic> locationData) async {
+    setState(() {
+      _messages.add(
+        ChatMessage(
+          text: '📍 ${locationData['address']}',
+          isCustomer: true,
+          timestamp: DateTime.now(),
+          locationData: locationData,
+          attachmentType: AttachmentType.location,
+        ),
+      );
+      _isLoading = true;
+    });
+
+    _scrollToBottom();
+
+    try {
+      final response = await http.post(
+        Uri.parse(_n8nChatUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+        },
+        body: jsonEncode({
+          'action': 'sendLocation',
+          'sessionId': SessionService.currentSessionId ?? 'no-session',
+          'locationData': locationData,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        String botResponse = '';
+
+        if (response.body.isEmpty) {
+          botResponse = 'Locatie ontvangen, maar geen reactie van server';
+        } else {
+          try {
+            final data = jsonDecode(response.body);
+            if (data is Map) {
+              botResponse = data['output'] ??
+                           data['response'] ??
+                           data['message'] ??
+                           data['text'] ??
+                           'Locatie ontvangen';
+            } else if (data is String) {
+              botResponse = data;
+            } else {
+              botResponse = 'Onverwacht response format';
+            }
+          } catch (e) {
+            botResponse = response.body.isNotEmpty ? response.body : 'Ongeldige server reactie';
+          }
+        }
+
+        setState(() {
+          _messages.add(ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      } else {
+        _addErrorMessage('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      _addErrorMessage('Sorry, er ging iets mis bij het versturen van de locatie.');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+      _scrollToBottom();
+    }
+  }
+
   void _onTextChanged(String text) {
     setState(() {
       _isTyping = text.trim().isNotEmpty;
@@ -384,7 +852,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: const Text('Annuleer'),
                     ),
                     TextButton(
-                      onPressed: () {
+                      onPressed: () async {
+                        await SessionService.resetSession();
                         setState(() {
                           _messages.clear();
                           _messages.add(ChatMessage(
@@ -463,11 +932,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         children: [
                           // Attachment icon
                           IconButton(
-                            onPressed: _isLoading ? null : () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Bijlagen nog niet beschikbaar')),
-                              );
-                            },
+                            onPressed: _isLoading ? null : _showAttachmentDialog,
                             icon: Icon(
                               Icons.attach_file,
                               color: _isLoading ? Colors.grey.shade400 : Colors.grey,
@@ -492,11 +957,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           // Camera icon
                           IconButton(
-                            onPressed: _isLoading ? null : () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Camera nog niet beschikbaar')),
-                              );
-                            },
+                            onPressed: _isLoading ? null : _showImageSourceDialog,
                             icon: Icon(
                               Icons.camera_alt,
                               color: _isLoading ? Colors.grey.shade400 : Colors.grey,
@@ -542,17 +1003,33 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+enum AttachmentType {
+  none,
+  audio,
+  image,
+  document,
+  location,
+}
+
 class ChatMessage {
   final String text;
   final bool isCustomer;
   final DateTime timestamp;
   final File? audioFile;
+  final File? imageFile;
+  final File? documentFile;
+  final Map<String, dynamic>? locationData;
+  final AttachmentType attachmentType;
 
   ChatMessage({
     required this.text,
     required this.isCustomer,
     required this.timestamp,
     this.audioFile,
+    this.imageFile,
+    this.documentFile,
+    this.locationData,
+    this.attachmentType = AttachmentType.none,
   });
 }
 
@@ -597,34 +1074,101 @@ class ChatBubble extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (message.audioFile != null)
+                  if (message.attachmentType == AttachmentType.audio && message.audioFile != null)
                     AudioMessageWidget(
                       audioFile: message.audioFile!,
                       isCustomer: message.isCustomer,
                       duration: message.text.replaceAll('🎤 Audio bericht (', '').replaceAll(')', ''),
                     )
+                  else if (message.attachmentType == AttachmentType.image && message.imageFile != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ImageMessageWidget(
+                          imageFile: message.imageFile!,
+                          isCustomer: message.isCustomer,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatTime(message.timestamp),
+                          style: TextStyle(
+                            color: message.isCustomer 
+                                ? Colors.white70 
+                                : Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    )
+                  else if (message.attachmentType == AttachmentType.document && message.documentFile != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        DocumentMessageWidget(
+                          documentFile: message.documentFile!,
+                          isCustomer: message.isCustomer,
+                          fileName: AttachmentService.getFileInfo(message.documentFile!)['fileName'],
+                          fileSize: AttachmentService.getFileInfo(message.documentFile!)['size'],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatTime(message.timestamp),
+                          style: TextStyle(
+                            color: message.isCustomer 
+                                ? Colors.white70 
+                                : Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    )
+                  else if (message.attachmentType == AttachmentType.location && message.locationData != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LocationMessageWidget(
+                          latitude: message.locationData!['latitude'],
+                          longitude: message.locationData!['longitude'],
+                          address: message.locationData!['address'],
+                          isCustomer: message.isCustomer,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatTime(message.timestamp),
+                          style: TextStyle(
+                            color: message.isCustomer 
+                                ? Colors.white70 
+                                : Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    )
                   else
-                    Text(
-                      message.text,
-                      style: TextStyle(
-                        color: message.isCustomer 
-                            ? Colors.white 
-                            : Colors.black87,
-                        fontSize: 16,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          message.text,
+                          style: TextStyle(
+                            color: message.isCustomer 
+                                ? Colors.white 
+                                : Colors.black87,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatTime(message.timestamp),
+                          style: TextStyle(
+                            color: message.isCustomer 
+                                ? Colors.white70 
+                                : Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                  if (message.audioFile == null) ...[  
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatTime(message.timestamp),
-                      style: TextStyle(
-                        color: message.isCustomer 
-                            ? Colors.white70 
-                            : Colors.grey.shade600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
