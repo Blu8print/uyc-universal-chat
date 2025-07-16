@@ -26,7 +26,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'kwaaijongens APP',
+      title: 'Kwaaijongens APP',
       theme: ThemeData(
         primarySwatch: Colors.red,
         primaryColor: const Color(0xFFCC0001),
@@ -60,10 +60,12 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isTyping = false;
   bool _isLoading = false;
   bool _isRecording = false;
+  bool _isEmailSending = false;
   Duration _recordingDuration = Duration.zero;
   
   final String _n8nChatUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
   final String _n8nImageUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/e54fbfea-e46e-4b21-9a05-48d75d568ae3';
+  final String _n8nEmailUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/69ffb2fc-518b-42a9-a490-a308c2e9a454';
   
   final List<ChatMessage> _messages = [];
 
@@ -831,6 +833,96 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _sendEmail() async {
+    if (_isEmailSending) return;
+    
+    setState(() {
+      _isEmailSending = true;
+    });
+    
+    // Show loading message in chat
+    setState(() {
+      _messages.add(ChatMessage(
+        text: "Email wordt verzonden...",
+        isCustomer: false,
+        timestamp: DateTime.now(),
+      ));
+    });
+    
+    _scrollToBottom();
+    
+    try {
+      // Prepare session data and messages for email
+      final emailData = {
+        'action': 'sendEmail',
+        'sessionId': SessionService.currentSessionId ?? 'no-session',
+        'messages': _messages.map((msg) => {
+          'text': msg.text,
+          'isCustomer': msg.isCustomer,
+          'timestamp': msg.timestamp.toIso8601String(),
+          'attachmentType': msg.attachmentType.toString(),
+        }).toList(),
+      };
+      
+      final response = await http.post(
+        Uri.parse(_n8nEmailUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+        },
+        body: jsonEncode(emailData),
+      ).timeout(const Duration(seconds: 90));
+      
+      if (response.statusCode == 200) {
+        // Success - reset session and show success message
+        await SessionService.resetSession();
+        setState(() {
+          _messages.add(ChatMessage(
+            text: "Email succesvol verzonden",
+            isCustomer: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      } else {
+        // Failure - show error message
+        String errorMessage = 'Email verzenden mislukt';
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map && data['error'] != null) {
+            errorMessage = 'Email verzenden mislukt: ${data['error']}';
+          } else {
+            errorMessage = 'Email verzenden mislukt (Status: ${response.statusCode})';
+          }
+        } catch (e) {
+          errorMessage = 'Email verzenden mislukt (Status: ${response.statusCode})';
+        }
+        
+        setState(() {
+          _messages.add(ChatMessage(
+            text: errorMessage,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      }
+    } catch (e) {
+      // Error handling
+      setState(() {
+        _messages.add(ChatMessage(
+          text: 'Email verzenden mislukt: Controleer je internetverbinding en probeer het opnieuw.',
+          isCustomer: false,
+          timestamp: DateTime.now(),
+        ));
+      });
+    } finally {
+      setState(() {
+        _isEmailSending = false;
+      });
+      _scrollToBottom();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -843,40 +935,53 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
         centerTitle: true,
+        leading: IconButton(
+          onPressed: () {
+            // Clear chat
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Chat wissen'),
+                content: const Text('Weet je zeker dat je alle berichten wilt verwijderen?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Annuleer'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await SessionService.resetSession();
+                      setState(() {
+                        _messages.clear();
+                        _messages.add(ChatMessage(
+                          text: "Hallo! Ik ben je AI-assistent van kwaaijongens APP. Ik help je graag met je blog ideeën en content creatie. Waar kan ik je mee helpen?",
+                          isCustomer: false,
+                          timestamp: DateTime.now(),
+                        ));
+                      });
+                      if (mounted) Navigator.pop(context);
+                    },
+                    child: const Text('Wissen'),
+                  ),
+                ],
+              ),
+            );
+          },
+          icon: const Icon(Icons.refresh),
+        ),
         actions: [
           IconButton(
-            onPressed: () {
-              // Clear chat
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Chat wissen'),
-                  content: const Text('Weet je zeker dat je alle berichten wilt verwijderen?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Annuleer'),
+            onPressed: _isEmailSending ? null : _sendEmail,
+            icon: _isEmailSending 
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
-                    TextButton(
-                      onPressed: () async {
-                        await SessionService.resetSession();
-                        setState(() {
-                          _messages.clear();
-                          _messages.add(ChatMessage(
-                            text: "Hallo! Ik ben je AI-assistent van kwaaijongens APP. Ik help je graag met je blog ideeën en content creatie. Waar kan ik je mee helpen?",
-                            isCustomer: false,
-                            timestamp: DateTime.now(),
-                          ));
-                        });
-                        Navigator.pop(context);
-                      },
-                      child: const Text('Wissen'),
-                    ),
-                  ],
-                ),
-              );
-            },
-            icon: const Icon(Icons.refresh),
+                  )
+                : const Icon(Icons.email),
           ),
         ],
       ),
