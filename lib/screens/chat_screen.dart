@@ -420,10 +420,10 @@ class _ChatScreenState extends State<ChatScreen> {
               ListTile(
                 leading: const Icon(Icons.photo_library, color: Color(0xFFCC0001)),
                 title: const Text('Galerij'),
-                subtitle: const Text('Foto\'s en afbeeldingen'),
+                subtitle: const Text('Meerdere foto\'s en afbeeldingen'),
                 onTap: () {
                   Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
+                  _pickMultipleImages();
                 },
               ),
               const SizedBox(height: 16),
@@ -530,6 +530,70 @@ class _ChatScreenState extends State<ChatScreen> {
             content: Text('Fout bij het selecteren van afbeelding: $e'),
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _pickMultipleImages() async {
+    try {
+      // Request gallery permission
+      final photosStatus = await Permission.photos.request();
+      if (photosStatus.isDenied) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Galerij toegang is vereist om foto\'s te selecteren.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final List<XFile> images = await _imagePicker.pickMultiImage(
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (images.isNotEmpty) {
+        // Limit to maximum 10 images
+        final limitedImages = images.take(10).toList();
+        final imageFiles = limitedImages.map((xFile) => File(xFile.path)).toList();
+        await _sendMultipleImages(imageFiles);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fout bij het selecteren van afbeeldingen: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendMultipleImages(List<File> imageFiles) async {
+    for (int i = 0; i < imageFiles.length; i++) {
+      final imageFile = imageFiles[i];
+      
+      // Add progress message
+      if (imageFiles.length > 1) {
+        setState(() {
+          _messages.add(ChatMessage(
+            text: 'Afbeelding ${i + 1} van ${imageFiles.length} wordt verzonden...',
+            isCustomer: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+        _scrollToBottom();
+      }
+      
+      // Send individual image
+      await _sendImageMessage(imageFile);
+      
+      // Small delay between uploads to avoid overwhelming the server
+      if (i < imageFiles.length - 1) {
+        await Future.delayed(const Duration(milliseconds: 500));
       }
     }
   }
