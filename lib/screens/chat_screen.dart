@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/session_service.dart';
 import '../services/attachment_service.dart';
+import '../services/document_routing_service.dart';
 import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
 import '../widgets/document_message_widget.dart';
@@ -62,6 +63,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Duration _recordingDuration = Duration.zero;
   
   final String _n8nChatUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
+  final String _n8nImageUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/e54fbfea-e46e-4b21-9a05-48d75d568ae3';
   
   final List<ChatMessage> _messages = [];
 
@@ -559,7 +561,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse(_n8nChatUrl),
+        Uri.parse(_n8nImageUrl),
       );
 
       request.fields['action'] = 'sendImage';
@@ -661,13 +663,17 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
 
     try {
+      final webhookUrl = DocumentRoutingService.getWebhookUrl(fileInfo['extension']);
+      
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse(_n8nChatUrl),
+        Uri.parse(webhookUrl),
       );
 
       request.fields['action'] = 'sendDocument';
       request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.fields['fileType'] = fileInfo['extension'];
+      request.fields['fileName'] = fileInfo['fileName'];
       request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
 
       request.files.add(

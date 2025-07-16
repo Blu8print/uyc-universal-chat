@@ -1,5 +1,4 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import 'auth_service.dart';
 
 class SessionService {
   static const String _sessionIdKey = 'current_session_id';
@@ -13,13 +12,10 @@ class SessionService {
     await _loadOrCreateSession();
   }
   
-  // Generate new session ID with format: test_session_($name$)(timestamp)
+  // Generate new session ID 
   static String _generateSessionId() {
-    final user = AuthService.currentUser;
-    final name = user?.name ?? 'unknown';
-    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000; // epoch seconds
-    
-    return 'test_session_($name)($timestamp)';
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return 'session_$timestamp';
   }
   
   // Start new session
