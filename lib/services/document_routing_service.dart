@@ -8,7 +8,7 @@ class DocumentRoutingService {
   
   static const Set<String> _routedDocumentTypes = {
     'pdf',
-    'doc', 'docx',
+    'doc', 'docx', 'odt',
     'xls', 'xlsx',
     'ppt', 'pptx'
   };

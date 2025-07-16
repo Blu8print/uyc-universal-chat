@@ -12,7 +12,6 @@ import '../services/document_routing_service.dart';
 import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
 import '../widgets/document_message_widget.dart';
-import '../widgets/location_message_widget.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -412,7 +411,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ListTile(
                 leading: const Icon(Icons.description, color: Color(0xFFCC0001)),
                 title: const Text('Document'),
-                subtitle: const Text('PDF, Word, Excel, PowerPoint'),
+                subtitle: const Text('PDF, Word, Excel, PowerPoint, ODT'),
                 onTap: () {
                   Navigator.pop(context);
                   _pickDocument();
@@ -424,16 +423,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 subtitle: const Text('Foto\'s en afbeeldingen'),
                 onTap: () {
                   Navigator.pop(context);
-                  _showImageSourceDialog();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.location_on, color: Color(0xFFCC0001)),
-                title: const Text('Locatie'),
-                subtitle: const Text('Huidige locatie delen'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _shareLocation();
+                  _pickImage(ImageSource.gallery);
                 },
               ),
               const SizedBox(height: 16),
@@ -735,97 +725,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _shareLocation() async {
-    try {
-      final locationData = await AttachmentService.getCurrentLocation();
-      if (locationData != null) {
-        await _sendLocationMessage(locationData);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fout bij het delen van locatie: $e'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _sendLocationMessage(Map<String, dynamic> locationData) async {
-    setState(() {
-      _messages.add(
-        ChatMessage(
-          text: '📍 ${locationData['address']}',
-          isCustomer: true,
-          timestamp: DateTime.now(),
-          locationData: locationData,
-          attachmentType: AttachmentType.location,
-        ),
-      );
-      _isLoading = true;
-    });
-
-    _scrollToBottom();
-
-    try {
-      final response = await http.post(
-        Uri.parse(_n8nChatUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-        },
-        body: jsonEncode({
-          'action': 'sendLocation',
-          'sessionId': SessionService.currentSessionId ?? 'no-session',
-          'locationData': locationData,
-        }),
-      ).timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        String botResponse = '';
-
-        if (response.body.isEmpty) {
-          botResponse = 'Locatie ontvangen, maar geen reactie van server';
-        } else {
-          try {
-            final data = jsonDecode(response.body);
-            if (data is Map) {
-              botResponse = data['output'] ??
-                           data['response'] ??
-                           data['message'] ??
-                           data['text'] ??
-                           'Locatie ontvangen';
-            } else if (data is String) {
-              botResponse = data;
-            } else {
-              botResponse = 'Onverwacht response format';
-            }
-          } catch (e) {
-            botResponse = response.body.isNotEmpty ? response.body : 'Ongeldige server reactie';
-          }
-        }
-
-        setState(() {
-          _messages.add(ChatMessage(
-            text: botResponse,
-            isCustomer: false,
-            timestamp: DateTime.now(),
-          ));
-        });
-      } else {
-        _addErrorMessage('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      _addErrorMessage('Sorry, er ging iets mis bij het versturen van de locatie.');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-      _scrollToBottom();
-    }
-  }
 
   void _onTextChanged(String text) {
     setState(() {
@@ -928,7 +827,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'kwaaijongens APP',
+          'Kwaaijongens APP',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 20,
@@ -1119,7 +1018,6 @@ enum AttachmentType {
   audio,
   image,
   document,
-  location,
 }
 
 class ChatMessage {
@@ -1129,7 +1027,6 @@ class ChatMessage {
   final File? audioFile;
   final File? imageFile;
   final File? documentFile;
-  final Map<String, dynamic>? locationData;
   final AttachmentType attachmentType;
 
   ChatMessage({
@@ -1139,7 +1036,6 @@ class ChatMessage {
     this.audioFile,
     this.imageFile,
     this.documentFile,
-    this.locationData,
     this.attachmentType = AttachmentType.none,
   });
 }
@@ -1220,28 +1116,6 @@ class ChatBubble extends StatelessWidget {
                           isCustomer: message.isCustomer,
                           fileName: AttachmentService.getFileInfo(message.documentFile!)['fileName'],
                           fileSize: AttachmentService.getFileInfo(message.documentFile!)['size'],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatTime(message.timestamp),
-                          style: TextStyle(
-                            color: message.isCustomer 
-                                ? Colors.white70 
-                                : Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    )
-                  else if (message.attachmentType == AttachmentType.location && message.locationData != null)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        LocationMessageWidget(
-                          latitude: message.locationData!['latitude'],
-                          longitude: message.locationData!['longitude'],
-                          address: message.locationData!['address'],
-                          isCustomer: message.isCustomer,
                         ),
                         const SizedBox(height: 4),
                         Text(

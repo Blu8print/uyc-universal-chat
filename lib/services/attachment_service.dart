@@ -12,7 +12,7 @@ class AttachmentService {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'],
+        allowedExtensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'odt'],
         allowMultiple: false,
         withData: false,
         withReadStream: false,
@@ -67,6 +67,7 @@ class AttachmentService {
         return '📄';
       case 'doc':
       case 'docx':
+      case 'odt':
         return '📝';
       case 'xls':
       case 'xlsx':
