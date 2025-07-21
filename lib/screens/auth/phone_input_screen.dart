@@ -63,7 +63,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     });
 
     final fullPhoneNumber = _getFullPhoneNumber();
-    final response = await AuthService.sendVerificationCode(fullPhoneNumber);
+    final response = await AuthService.sendVerificationCode(fullPhoneNumber, _nameController.text.trim());
 
     if (mounted) {
       setState(() {
@@ -101,7 +101,11 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
               constraints: BoxConstraints(
                 minHeight: MediaQuery.of(context).size.height - 
                            MediaQuery.of(context).padding.top - 
-                           MediaQuery.of(context).padding.bottom - 48, // Account for padding
+                           MediaQuery.of(context).padding.bottom - 48 > 0 
+                           ? MediaQuery.of(context).size.height - 
+                             MediaQuery.of(context).padding.top - 
+                             MediaQuery.of(context).padding.bottom - 48
+                           : 400, // Fallback minimum height
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

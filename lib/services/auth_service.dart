@@ -26,8 +26,8 @@ class AuthService {
   }
   
   // Send SMS verification code
-  static Future<ApiResponse> sendVerificationCode(String phoneNumber) async {
-    return await ApiService.sendSmsCode(phoneNumber);
+  static Future<ApiResponse> sendVerificationCode(String phoneNumber, String name) async {
+    return await ApiService.sendSmsCode(phoneNumber, name);
   }
   
   // Verify SMS code and complete registration
@@ -46,9 +46,12 @@ class AuthService {
       // Create user with API response data
       _currentUser = User(
         phoneNumber: phoneNumber,
-        name: name,
-        companyName: response.data!['companyName'],
-        webhookUrl: response.data!['webhookUrl'],
+        name: response.data!['name'] ?? name,
+        companyName: response.data!['companyName'] ?? '',
+        webhookUrl: response.data!['webhookUrl'] ?? '',
+        email: response.data!['email'] ?? '',
+        phone: response.data!['phone'] ?? phoneNumber,
+        website: response.data!['website'] ?? '',
         lastLogin: DateTime.now(),
       );
       
@@ -74,5 +77,31 @@ class AuthService {
   // Get webhook URL for chat
   static String? getWebhookUrl() {
     return _currentUser?.webhookUrl;
+  }
+  
+  // Get client data for webhook requests
+  static Map<String, dynamic>? getClientData() {
+    if (_currentUser == null) return null;
+    
+    return {
+      'webhookUrl': _currentUser!.webhookUrl,
+      'name': _currentUser!.name,
+      'companyName': _currentUser!.companyName,
+      'email': _currentUser!.email,
+      'phone': _currentUser!.phone,
+      'website': _currentUser!.website,
+    };
+  }
+  
+  // Check if client data is complete
+  static bool isClientDataComplete() {
+    final clientData = getClientData();
+    if (clientData == null) return false;
+    
+    return clientData['webhookUrl'].isNotEmpty &&
+           clientData['name'].isNotEmpty &&
+           clientData['companyName'].isNotEmpty &&
+           clientData['email'].isNotEmpty &&
+           clientData['phone'].isNotEmpty;
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
@@ -14,6 +15,7 @@ import '../widgets/image_message_widget.dart';
 import '../widgets/document_message_widget.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   runApp(const MyApp());
@@ -165,6 +167,7 @@ class _ChatScreenState extends State<ChatScreen> {
           'action': 'sendMessage',
           'sessionId': SessionService.currentSessionId ?? 'no-session',
           'chatInput': message,
+          'clientData': AuthService.getClientData(),
         }),
       ).timeout(const Duration(seconds: 30));
       
@@ -306,6 +309,12 @@ class _ChatScreenState extends State<ChatScreen> {
       request.fields['action'] = 'sendAudio';
       request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
       request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+      
+      // Add client data to form fields
+      final clientData = AuthService.getClientData();
+      if (clientData != null) {
+        request.fields['clientData'] = jsonEncode(clientData);
+      }
       
       request.files.add(
         await http.MultipartFile.fromPath(
@@ -623,6 +632,12 @@ class _ChatScreenState extends State<ChatScreen> {
       request.fields['action'] = 'sendImage';
       request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
       request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+      
+      // Add client data to form fields
+      final clientData = AuthService.getClientData();
+      if (clientData != null) {
+        request.fields['clientData'] = jsonEncode(clientData);
+      }
 
       final fileInfo = _getFileExtensionAndMimeType(imageFile.path);
       
@@ -731,6 +746,12 @@ class _ChatScreenState extends State<ChatScreen> {
       request.fields['fileType'] = fileInfo['extension'];
       request.fields['fileName'] = fileInfo['fileName'];
       request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+      
+      // Add client data to form fields
+      final clientData = AuthService.getClientData();
+      if (clientData != null) {
+        request.fields['clientData'] = jsonEncode(clientData);
+      }
 
       request.files.add(
         await http.MultipartFile.fromPath(
@@ -825,6 +846,7 @@ class _ChatScreenState extends State<ChatScreen> {
           'timestamp': msg.timestamp.toIso8601String(),
           'attachmentType': msg.attachmentType.toString(),
         }).toList(),
+        'clientData': AuthService.getClientData(),
       };
       
       final response = await http.post(
@@ -835,14 +857,42 @@ class _ChatScreenState extends State<ChatScreen> {
           'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
         },
         body: jsonEncode(emailData),
-      ).timeout(const Duration(seconds: 90));
+      ).timeout(const Duration(seconds: 120));
       
       if (response.statusCode == 200) {
-        // Success - reset session and show success message
+        // Success - reset session and show webhook response
         await SessionService.resetSession();
+        
+        String emailResponse = '';
+        
+        // Check if response body is empty
+        if (response.body.isEmpty) {
+          emailResponse = 'Email succesvol verzonden';
+        } else {
+          try {
+            final data = jsonDecode(response.body);
+            // Handle webhook response format - check for common response fields
+            if (data is Map) {
+              emailResponse = data['output'] ?? 
+                           data['response'] ?? 
+                           data['message'] ?? 
+                           data['reply'] ?? 
+                           data['text'] ??
+                           'Email succesvol verzonden';
+            } else if (data is String) {
+              emailResponse = data;
+            } else {
+              emailResponse = 'Email succesvol verzonden';
+            }
+          } catch (e) {
+            // If JSON parsing fails, use the raw response or default message
+            emailResponse = response.body.isNotEmpty ? response.body : 'Email succesvol verzonden';
+          }
+        }
+        
         setState(() {
           _messages.add(ChatMessage(
-            text: "Email succesvol verzonden",
+            text: emailResponse,
             isCustomer: false,
             timestamp: DateTime.now(),
           ));
@@ -1197,8 +1247,8 @@ class ChatBubble extends StatelessWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          message.text,
+                        LinkableSelectableText(
+                          text: message.text,
                           style: TextStyle(
                             color: message.isCustomer 
                                 ? Colors.white 
@@ -1341,5 +1391,97 @@ class _TypingIndicatorState extends State<TypingIndicator>
         ],
       ),
     );
+  }
+}
+
+class LinkableSelectableText extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+
+  const LinkableSelectableText({
+    super.key,
+    required this.text,
+    this.style,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectableText.rich(
+      _buildTextSpan(),
+      style: style,
+    );
+  }
+
+  TextSpan _buildTextSpan() {
+    final List<TextSpan> children = [];
+    final RegExp linkRegExp = RegExp(
+      r'(https?://[^\s]+|www\.[^\s]+|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|\+?[\d\s\-\(\)]+(?:\d{3,}))',
+      caseSensitive: false,
+    );
+
+    int currentIndex = 0;
+    final matches = linkRegExp.allMatches(text);
+
+    for (final match in matches) {
+      // Add text before the link
+      if (match.start > currentIndex) {
+        children.add(TextSpan(
+          text: text.substring(currentIndex, match.start),
+          style: style,
+        ));
+      }
+
+      // Add the clickable link
+      final linkText = match.group(0)!;
+      children.add(TextSpan(
+        text: linkText,
+        style: style?.copyWith(
+          color: Colors.blue,
+          decoration: TextDecoration.underline,
+        ),
+        recognizer: TapGestureRecognizer()..onTap = () => _launchUrl(linkText),
+      ));
+
+      currentIndex = match.end;
+    }
+
+    // Add remaining text after the last link
+    if (currentIndex < text.length) {
+      children.add(TextSpan(
+        text: text.substring(currentIndex),
+        style: style,
+      ));
+    }
+
+    // If no links found, return the entire text as a single span
+    if (children.isEmpty) {
+      return TextSpan(text: text, style: style);
+    }
+
+    return TextSpan(children: children);
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    Uri? uri;
+    
+    // Handle different URL formats
+    if (urlString.contains('@')) {
+      // Email address
+      uri = Uri.parse('mailto:$urlString');
+    } else if (urlString.startsWith(RegExp(r'\+?[\d\s\-\(\)]'))) {
+      // Phone number
+      final cleanPhone = urlString.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+      uri = Uri.parse('tel:$cleanPhone');
+    } else if (urlString.startsWith('www.')) {
+      // www links
+      uri = Uri.parse('https://$urlString');
+    } else if (urlString.startsWith(RegExp(r'https?://'))) {
+      // Full URLs
+      uri = Uri.parse(urlString);
+    }
+
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 }

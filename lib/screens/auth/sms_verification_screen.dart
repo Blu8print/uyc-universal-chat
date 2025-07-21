@@ -86,7 +86,7 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
       _errorMessage = null;
     });
 
-    final response = await AuthService.sendVerificationCode(widget.phoneNumber);
+    final response = await AuthService.sendVerificationCode(widget.phoneNumber, widget.name);
 
     if (mounted) {
       setState(() {

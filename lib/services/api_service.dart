@@ -7,7 +7,7 @@ class ApiService {
   static const String _verifySmsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/verify-sms';
   
   // Send SMS verification code
-  static Future<ApiResponse> sendSmsCode(String phoneNumber) async {
+  static Future<ApiResponse> sendSmsCode(String phoneNumber, String name) async {
     try {
       final response = await http.post(
         Uri.parse(_sendSmsUrl),
@@ -17,6 +17,7 @@ class ApiService {
         },
         body: jsonEncode({
           'phoneNumber': phoneNumber,
+          'name': name,
         }),
       ).timeout(const Duration(seconds: 30));
 
@@ -55,15 +56,35 @@ class ApiService {
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return ApiResponse(
-          success: true,
-          message: 'Registratie succesvol',
-          data: {
-            'webhookUrl': data['webhookUrl'],
-            'companyName': data['companyName'],
-          },
-        );
+        final responseData = jsonDecode(response.body);
+        
+        // Handle array response format
+        if (responseData is List && responseData.isNotEmpty) {
+          final data = responseData[0];
+          
+          // Check the success field from the response data
+          if (data['success'] == true) {
+            return ApiResponse(
+              success: true,
+              message: data['message'] ?? 'Registratie succesvol',
+              data: {
+                'webhookUrl': data['webhookUrl'] ?? '',
+                'name': data['name'] ?? '',
+                'companyName': data['companyName'] ?? '',
+                'email': data['email'] ?? '',
+                'phone': data['phone'] ?? '',
+                'website': data['website'] ?? '',
+              },
+            );
+          } else {
+            return ApiResponse(
+              success: false, 
+              message: data['message'] ?? 'Verificatie mislukt'
+            );
+          }
+        } else {
+          return ApiResponse(success: false, message: 'Ongeldig response format');
+        }
       } else if (response.statusCode == 400) {
         return ApiResponse(success: false, message: 'Ongeldige verificatiecode');
       } else if (response.statusCode == 429) {
