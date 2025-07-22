@@ -12,6 +12,7 @@ class PhoneInputScreen extends StatefulWidget {
 
 class _PhoneInputScreenState extends State<PhoneInputScreen> {
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _countryCodeController = TextEditingController(text: '+31');
   bool _isLoading = false;
@@ -20,6 +21,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _emailController.dispose();
     _phoneController.dispose();
     _countryCodeController.dispose();
     super.dispose();
@@ -35,6 +37,11 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     return '$countryCode$cleanPhone';
   }
 
+  bool _isValidEmail() {
+    final email = _emailController.text.trim();
+    return email.isNotEmpty && email.contains('@') && email.contains('.');
+  }
+
   bool _isValidPhoneNumber() {
     final phone = _phoneController.text.trim();
     // Dutch mobile numbers: 06xxxxxxxx or 6xxxxxxxx
@@ -43,7 +50,9 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   }
 
   bool _isValidInput() {
-    return _nameController.text.trim().isNotEmpty && _isValidPhoneNumber();
+    return _nameController.text.trim().isNotEmpty && 
+           _isValidEmail() && 
+           _isValidPhoneNumber();
   }
 
   Future<void> _sendSmsCode() async {
@@ -51,6 +60,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
       setState(() {
         if (_nameController.text.trim().isEmpty) {
           _errorMessage = 'Voer je naam in';
+        } else if (!_isValidEmail()) {
+          _errorMessage = 'Voer een geldig e-mailadres in';
         } else if (!_isValidPhoneNumber()) {
           _errorMessage = 'Voer een geldig Nederlands mobiel nummer in (06xxxxxxxx of 6xxxxxxxx)';
         }
@@ -64,7 +75,11 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     });
 
     final fullPhoneNumber = _getFullPhoneNumber();
-    final response = await AuthService.sendVerificationCode(fullPhoneNumber, _nameController.text.trim());
+    final response = await AuthService.sendVerificationCode(
+      fullPhoneNumber, 
+      _nameController.text.trim(),
+      _emailController.text.trim()
+    );
 
     if (mounted) {
       setState(() {
@@ -79,6 +94,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             builder: (context) => SmsVerificationScreen(
               phoneNumber: fullPhoneNumber,
               name: _nameController.text.trim(),
+              email: _emailController.text.trim(),
             ),
           ),
         );
@@ -148,6 +164,28 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Je naam',
                   hintText: 'Voor- en achternaam',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                ),
+                onChanged: (value) {
+                  if (_errorMessage != null) {
+                    setState(() {
+                      _errorMessage = null;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // Email input
+              TextField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                style: const TextStyle(fontSize: 16),
+                maxLines: 1,
+                decoration: const InputDecoration(
+                  labelText: 'E-mailadres',
+                  hintText: 'jouw@email.nl',
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 ),

@@ -62,4 +62,16 @@ class StorageService {
       return false;
     }
   }
+
+  // Clear ALL app data (for reset functionality)
+  static Future<bool> clearAllData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      return true;
+    } catch (e) {
+      print('Error clearing all data: $e');
+      return false;
+    }
+  }
 }

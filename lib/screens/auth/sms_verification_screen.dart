@@ -6,11 +6,13 @@ import '../../screens/chat_screen.dart';
 class SmsVerificationScreen extends StatefulWidget {
   final String phoneNumber;
   final String name;
+  final String email;
 
   const SmsVerificationScreen({
     super.key,
     required this.phoneNumber,
     required this.name,
+    required this.email,
   });
 
   @override
@@ -49,6 +51,7 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
     final response = await AuthService.verifyAndRegister(
       phoneNumber: widget.phoneNumber,
       name: widget.name,
+      email: widget.email,
       smsCode: _codeController.text.trim(),
     );
 
@@ -86,7 +89,7 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
       _errorMessage = null;
     });
 
-    final response = await AuthService.sendVerificationCode(widget.phoneNumber, widget.name);
+    final response = await AuthService.sendVerificationCode(widget.phoneNumber, widget.name, widget.email);
 
     if (mounted) {
       setState(() {

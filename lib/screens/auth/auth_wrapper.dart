@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../services/auth_service.dart';
+import '../../services/api_service.dart';
+import '../../services/storage_service.dart';
 import '../../screens/chat_screen.dart';
+import '../../widgets/message_dialog.dart';
 import 'phone_input_screen.dart';
 
 class AuthWrapper extends StatefulWidget {
@@ -25,14 +29,93 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // Initialize auth service and check if user is logged in
       final isLoggedIn = await AuthService.initialize();
       
-      setState(() {
-        _isAuthenticated = isLoggedIn;
-        _isLoading = false;
-      });
+      if (isLoggedIn) {
+        // User is logged in, perform version check
+        await _performVersionCheck();
+      } else {
+        // User not logged in, go to phone input
+        setState(() {
+          _isAuthenticated = false;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       print('Error checking auth status: $e');
       setState(() {
         _isAuthenticated = false;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _performVersionCheck() async {
+    try {
+      // Get app version and user phone number
+      final packageInfo = await PackageInfo.fromPlatform();
+      final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      final user = AuthService.currentUser;
+      
+      if (user?.phoneNumber != null) {
+        // Call version check API
+        final versionResponse = await ApiService.checkVersion(
+          appVersion,
+          user!.phoneNumber,
+        );
+        
+        if (versionResponse.success) {
+          if (versionResponse.reset) {
+            // Reset = true: clear all data, logout, show message, go to phone input
+            await StorageService.clearAllData();
+            await AuthService.logout();
+            
+            if (mounted) {
+              setState(() {
+                _isAuthenticated = false;
+                _isLoading = false;
+              });
+              
+              // Show custom message if provided
+              if (versionResponse.message.isNotEmpty) {
+                await showCustomMessageDialog(context, versionResponse.message);
+              }
+            }
+          } else {
+            // Reset = false: show message (if any), continue to chat
+            setState(() {
+              _isAuthenticated = true;
+              _isLoading = false;
+            });
+            
+            // Show custom message if provided
+            if (mounted && versionResponse.message.isNotEmpty) {
+              // Use Future.delayed to show dialog after build completes
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) {
+                  showCustomMessageDialog(context, versionResponse.message);
+                }
+              });
+            }
+          }
+        } else {
+          // API call failed: continue to chat silently (fail gracefully)
+          setState(() {
+            _isAuthenticated = true;
+            _isLoading = false;
+          });
+        }
+      } else {
+        // No phone number available, logout
+        await AuthService.logout();
+        setState(() {
+          _isAuthenticated = false;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error during version check: $e');
+      // On error, continue to chat (fail gracefully)
+      setState(() {
+        _isAuthenticated = true;
         _isLoading = false;
       });
     }

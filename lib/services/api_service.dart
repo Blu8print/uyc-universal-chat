@@ -5,9 +5,10 @@ class ApiService {
   // Your production URLs
   static const String _sendSmsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/send-sms';
   static const String _verifySmsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/verify-sms';
+  static const String _versionCheckUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/version-check';
   
   // Send SMS verification code
-  static Future<ApiResponse> sendSmsCode(String phoneNumber, String name) async {
+  static Future<ApiResponse> sendSmsCode(String phoneNumber, String name, String email) async {
     try {
       final response = await http.post(
         Uri.parse(_sendSmsUrl),
@@ -18,6 +19,7 @@ class ApiService {
         body: jsonEncode({
           'phoneNumber': phoneNumber,
           'name': name,
+          'email': email,
         }),
       ).timeout(const Duration(seconds: 30));
 
@@ -39,6 +41,7 @@ class ApiService {
   static Future<ApiResponse> verifySmsAndRegister({
     required String phoneNumber,
     required String name,
+    required String email,
     required String smsCode,
   }) async {
     try {
@@ -51,6 +54,7 @@ class ApiService {
         body: jsonEncode({
           'phoneNumber': phoneNumber,
           'name': name,
+          'email': email,
           'smsCode': smsCode,
         }),
       ).timeout(const Duration(seconds: 30));
@@ -96,6 +100,46 @@ class ApiService {
       return ApiResponse(success: false, message: 'Netwerkfout. Controleer je internetverbinding.');
     }
   }
+
+  // Check app version and user status
+  static Future<VersionCheckResponse> checkVersion(String version, String phoneNumber) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_versionCheckUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'version': version,
+          'phoneNumber': phoneNumber,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        
+        // Handle array response format
+        if (responseData is List && responseData.isNotEmpty) {
+          final data = responseData[0];
+          
+          return VersionCheckResponse(
+            success: true,
+            reset: data['Reset'] ?? false,
+            message: data['message'] ?? '',
+            appVersion: data['App-version'] ?? version,
+          );
+        } else {
+          return VersionCheckResponse(success: false);
+        }
+      } else {
+        return VersionCheckResponse(success: false);
+      }
+    } catch (e) {
+      // Fail silently - return success=false so app continues normally
+      return VersionCheckResponse(success: false);
+    }
+  }
 }
 
 // Response wrapper class
@@ -108,5 +152,20 @@ class ApiResponse {
     required this.success,
     required this.message,
     this.data,
+  });
+}
+
+// Version check response class
+class VersionCheckResponse {
+  final bool success;
+  final bool reset;
+  final String message;
+  final String appVersion;
+
+  VersionCheckResponse({
+    required this.success,
+    this.reset = false,
+    this.message = '',
+    this.appVersion = '',
   });
 }

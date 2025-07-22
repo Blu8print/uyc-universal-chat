@@ -29,19 +29,21 @@ class AuthService {
   }
   
   // Send SMS verification code
-  static Future<ApiResponse> sendVerificationCode(String phoneNumber, String name) async {
-    return await ApiService.sendSmsCode(phoneNumber, name);
+  static Future<ApiResponse> sendVerificationCode(String phoneNumber, String name, String email) async {
+    return await ApiService.sendSmsCode(phoneNumber, name, email);
   }
   
   // Verify SMS code and complete registration
   static Future<ApiResponse> verifyAndRegister({
     required String phoneNumber,
     required String name,
+    required String email,
     required String smsCode,
   }) async {
     final response = await ApiService.verifySmsAndRegister(
       phoneNumber: phoneNumber,
       name: name,
+      email: email,
       smsCode: smsCode,
     );
     
