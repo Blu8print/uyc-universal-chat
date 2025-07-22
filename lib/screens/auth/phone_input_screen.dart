@@ -37,8 +37,9 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
 
   bool _isValidPhoneNumber() {
     final phone = _phoneController.text.trim();
-    // Dutch mobile numbers: 06xxxxxxxx (10 digits total)
-    return phone.length >= 9 && phone.length <= 10 && phone.startsWith('06');
+    // Dutch mobile numbers: 06xxxxxxxx or 6xxxxxxxx
+    return phone.length >= 8 && phone.length <= 10 && 
+           (phone.startsWith('06') || phone.startsWith('6'));
   }
 
   bool _isValidInput() {
@@ -51,7 +52,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         if (_nameController.text.trim().isEmpty) {
           _errorMessage = 'Voer je naam in';
         } else if (!_isValidPhoneNumber()) {
-          _errorMessage = 'Voer een geldig Nederlands mobiel nummer in (06xxxxxxxx)';
+          _errorMessage = 'Voer een geldig Nederlands mobiel nummer in (06xxxxxxxx of 6xxxxxxxx)';
         }
       });
       return;

@@ -5,6 +5,9 @@ import 'api_service.dart';
 class AuthService {
   static User? _currentUser;
   
+  // Default webhook URL
+  static const String _defaultWebhookUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
+  
   // Get current user
   static User? get currentUser => _currentUser;
   
@@ -48,7 +51,9 @@ class AuthService {
         phoneNumber: phoneNumber,
         name: response.data!['name'] ?? name,
         companyName: response.data!['companyName'] ?? '',
-        webhookUrl: response.data!['webhookUrl'] ?? '',
+        webhookUrl: response.data!['webhookUrl']?.isNotEmpty == true 
+                   ? response.data!['webhookUrl'] 
+                   : _defaultWebhookUrl,
         email: response.data!['email'] ?? '',
         phone: response.data!['phone'] ?? phoneNumber,
         website: response.data!['website'] ?? '',
