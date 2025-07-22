@@ -74,4 +74,46 @@ class StorageService {
       return false;
     }
   }
+
+  // Save messages for a session
+  static Future<bool> saveMessages(String sessionId, List<Map<String, dynamic>> messages) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final messagesJson = jsonEncode(messages);
+      await prefs.setString('messages_$sessionId', messagesJson);
+      return true;
+    } catch (e) {
+      print('Error saving messages: $e');
+      return false;
+    }
+  }
+
+  // Load messages for a session
+  static Future<List<Map<String, dynamic>>> loadMessages(String sessionId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final messagesJson = prefs.getString('messages_$sessionId');
+      
+      if (messagesJson != null) {
+        final List<dynamic> messagesList = jsonDecode(messagesJson);
+        return messagesList.cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      print('Error loading messages: $e');
+      return [];
+    }
+  }
+
+  // Clear messages for a session
+  static Future<bool> clearMessages(String sessionId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('messages_$sessionId');
+      return true;
+    } catch (e) {
+      print('Error clearing messages: $e');
+      return false;
+    }
+  }
 }

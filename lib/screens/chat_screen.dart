@@ -8,6 +8,7 @@ import 'package:http_parser/http_parser.dart';
 import '../services/auth_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/session_service.dart';
+import '../services/storage_service.dart';
 import '../services/attachment_service.dart';
 import '../services/document_routing_service.dart';
 import '../widgets/audio_message_widget.dart';
@@ -73,8 +74,12 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeServices();
-    _initializeWelcomeMessage();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    await _initializeServices();
+    await _initializeWelcomeMessage();
     _requestInitialPermissions();
   }
 
@@ -88,18 +93,67 @@ class _ChatScreenState extends State<ChatScreen> {
     print('DEBUG: Initial permission result: $result');
   }
 
-  void _initializeWelcomeMessage() {
+  Future<void> _initializeWelcomeMessage() async {
     final user = AuthService.currentUser;
     final userName = user?.name ?? 'daar';
     final companyName = user?.companyName ?? 'je bedrijf';
     
+    // Load existing messages for current session
+    final sessionId = SessionService.currentSessionId;
+    if (sessionId != null) {
+      final savedMessages = await StorageService.loadMessages(sessionId);
+      
+      if (savedMessages.isNotEmpty) {
+        // Load existing messages
+        final messages = savedMessages
+            .map((json) => ChatMessage.fromJson(json))
+            .where((msg) => _isFileStillValid(msg)) // Filter out messages with missing files
+            .toList();
+        
+        setState(() {
+          _messages.addAll(messages);
+        });
+        return;
+      }
+    }
+    
+    // No existing messages - add welcome message
+    await _addMessage(ChatMessage(
+      text: "Hallo $userName! Ik ben je AI-assistent van Kwaaijongens. Ik help $companyName graag met blog ideeën en content creatie. Waar kan ik je mee helpen?",
+      isCustomer: false,
+      timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
+    ));
+  }
+
+  // Check if message files still exist
+  bool _isFileStillValid(ChatMessage message) {
+    if (message.audioFile != null && !message.audioFile!.existsSync()) {
+      return false;
+    }
+    if (message.imageFile != null && !message.imageFile!.existsSync()) {
+      return false;
+    }
+    if (message.documentFile != null && !message.documentFile!.existsSync()) {
+      return false;
+    }
+    return true;
+  }
+
+  // Save messages to storage
+  Future<void> _saveMessages() async {
+    final sessionId = SessionService.currentSessionId;
+    if (sessionId != null) {
+      final messagesJson = _messages.map((msg) => msg.toJson()).toList();
+      await StorageService.saveMessages(sessionId, messagesJson);
+    }
+  }
+
+  // Add message and save to storage
+  Future<void> _addMessage(ChatMessage message) async {
     setState(() {
-      _messages.add(ChatMessage(
-        text: "Hallo $userName! Ik ben je AI-assistent van Kwaaijongens. Ik help $companyName graag met blog ideeën en content creatie. Waar kan ik je mee helpen?",
-        isCustomer: false,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
-      ));
+      _messages.add(message);
     });
+    await _saveMessages();
   }
 
   @override
@@ -128,14 +182,13 @@ class _ChatScreenState extends State<ChatScreen> {
       final userMessage = _messageController.text.trim();
       
       // Add user message immediately
+      await _addMessage(ChatMessage(
+        text: userMessage,
+        isCustomer: true,
+        timestamp: DateTime.now(),
+      ));
+      
       setState(() {
-        _messages.add(
-          ChatMessage(
-            text: userMessage,
-            isCustomer: true,
-            timestamp: DateTime.now(),
-          ),
-        );
         _isLoading = true;
       });
       
@@ -202,30 +255,26 @@ class _ChatScreenState extends State<ChatScreen> {
         }
         
         // Add bot response
-        setState(() {
-          _messages.add(ChatMessage(
-            text: botResponse,
-            isCustomer: false,
-            timestamp: DateTime.now(),
-          ));
-        });
+        await _addMessage(ChatMessage(
+          text: botResponse,
+          isCustomer: false,
+          timestamp: DateTime.now(),
+        ));
       } else {
         _addErrorMessage('Server error: ${response.statusCode}');
       }
     } catch (e) {
       // Error sending to n8n: $e
-      _addErrorMessage('Sorry, er ging iets mis. Controleer je internetverbinding en probeer het opnieuw.');
+      await _addErrorMessage('Sorry, er ging iets mis. Controleer je internetverbinding en probeer het opnieuw.');
     }
   }
 
-  void _addErrorMessage(String errorText) {
-    setState(() {
-      _messages.add(ChatMessage(
-        text: errorText,
-        isCustomer: false,
-        timestamp: DateTime.now(),
-      ));
-    });
+  Future<void> _addErrorMessage(String errorText) async {
+    await _addMessage(ChatMessage(
+      text: errorText,
+      isCustomer: false,
+      timestamp: DateTime.now(),
+    ));
   }
 
   Future<void> _startRecording() async {
@@ -963,15 +1012,25 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   TextButton(
                     onPressed: () async {
+                      final oldSessionId = SessionService.currentSessionId;
                       await SessionService.resetSession();
+                      
+                      // Clear stored messages for old session
+                      if (oldSessionId != null) {
+                        await StorageService.clearMessages(oldSessionId);
+                      }
+                      
+                      // Clear current messages and add welcome message
                       setState(() {
                         _messages.clear();
-                        _messages.add(ChatMessage(
-                          text: "Hallo! Ik ben je AI-assistent van kwaaijongens APP. Ik help je graag met je blog ideeën en content creatie. Waar kan ik je mee helpen?",
-                          isCustomer: false,
-                          timestamp: DateTime.now(),
-                        ));
                       });
+                      
+                      await _addMessage(ChatMessage(
+                        text: "Hallo! Ik ben je AI-assistent van kwaaijongens APP. Ik help je graag met je blog ideeën en content creatie. Waar kan ik je mee helpen?",
+                        isCustomer: false,
+                        timestamp: DateTime.now(),
+                      ));
+                      
                       if (mounted) Navigator.pop(context);
                     },
                     child: const Text('Wissen'),
@@ -1075,8 +1134,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
                               ),
                               maxLines: null,
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _sendMessage(),
+                              textInputAction: TextInputAction.newline,
                             ),
                           ),
                           // Camera icon
@@ -1152,6 +1210,52 @@ class ChatMessage {
     this.documentFile,
     this.attachmentType = AttachmentType.none,
   });
+
+  // Convert to JSON for storage (files stored as paths)
+  Map<String, dynamic> toJson() {
+    return {
+      'text': text,
+      'isCustomer': isCustomer,
+      'timestamp': timestamp.toIso8601String(),
+      'audioFilePath': audioFile?.path,
+      'imageFilePath': imageFile?.path,
+      'documentFilePath': documentFile?.path,
+      'attachmentType': attachmentType.toString(),
+    };
+  }
+
+  // Create from JSON (recreate File objects from paths if they exist)
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    return ChatMessage(
+      text: json['text'],
+      isCustomer: json['isCustomer'],
+      timestamp: DateTime.parse(json['timestamp']),
+      audioFile: json['audioFilePath'] != null 
+          ? File(json['audioFilePath']) 
+          : null,
+      imageFile: json['imageFilePath'] != null 
+          ? File(json['imageFilePath']) 
+          : null,
+      documentFile: json['documentFilePath'] != null 
+          ? File(json['documentFilePath']) 
+          : null,
+      attachmentType: _parseAttachmentType(json['attachmentType']),
+    );
+  }
+
+  // Helper to parse attachment type from string
+  static AttachmentType _parseAttachmentType(String? typeString) {
+    switch (typeString) {
+      case 'AttachmentType.audio':
+        return AttachmentType.audio;
+      case 'AttachmentType.image':
+        return AttachmentType.image;
+      case 'AttachmentType.document':
+        return AttachmentType.document;
+      default:
+        return AttachmentType.none;
+    }
+  }
 }
 
 class ChatBubble extends StatelessWidget {
