@@ -11,6 +11,7 @@ import '../services/session_service.dart';
 import '../services/storage_service.dart';
 import '../services/attachment_service.dart';
 import '../services/document_routing_service.dart';
+import '../services/network_service.dart';
 import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
 import '../widgets/document_message_widget.dart';
@@ -179,6 +180,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendMessage() async {
     if (_messageController.text.trim().isNotEmpty && !_isLoading) {
+      // Check connectivity first
+      final isOnline = await NetworkService.isOnline();
+      if (!isOnline) {
+        await _addErrorMessage('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.');
+        return;
+      }
+      
       final userMessage = _messageController.text.trim();
       
       // Add user message immediately
@@ -279,6 +287,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _startRecording() async {
     print('DEBUG: Starting recording...');
+    
+    // Check connectivity first
+    final isOnline = await NetworkService.isOnline();
+    if (!isOnline) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+    
     final hasPermission = await _audioService.requestPermission();
     print('DEBUG: Recording permission granted: $hasPermission');
     
@@ -334,6 +357,20 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendAudioMessage(File audioFile) async {
+    // Check connectivity first
+    final isOnline = await NetworkService.isOnline();
+    if (!isOnline) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+    
     setState(() {
       _messages.add(
         ChatMessage(
@@ -543,6 +580,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
+      // Check connectivity first
+      final isOnline = await NetworkService.isOnline();
+      if (!isOnline) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+      
       // Request permissions
       if (source == ImageSource.camera) {
         final cameraStatus = await Permission.camera.request();
@@ -594,6 +645,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickMultipleImages() async {
     try {
+      // Check connectivity first
+      final isOnline = await NetworkService.isOnline();
+      if (!isOnline) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+      
       // Request gallery permission
       final photosStatus = await Permission.photos.request();
       if (photosStatus.isDenied) {
@@ -657,6 +722,20 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendImageMessage(File imageFile) async {
+    // Check connectivity first
+    final isOnline = await NetworkService.isOnline();
+    if (!isOnline) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+    
     setState(() {
       _messages.add(
         ChatMessage(
@@ -749,6 +828,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickDocument() async {
     try {
+      // Check connectivity first
+      final isOnline = await NetworkService.isOnline();
+      if (!isOnline) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+      
       final documentFile = await AttachmentService.pickDocument();
       if (documentFile != null) {
         await _sendDocumentMessage(documentFile);
@@ -765,6 +858,20 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendDocumentMessage(File documentFile) async {
+    // Check connectivity first
+    final isOnline = await NetworkService.isOnline();
+    if (!isOnline) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+    
     final fileInfo = AttachmentService.getFileInfo(documentFile);
     
     setState(() {
@@ -868,6 +975,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendEmail() async {
     if (_isEmailSending) return;
+    
+    // Check connectivity first
+    final isOnline = await NetworkService.isOnline();
+    if (!isOnline) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
     
     setState(() {
       _isEmailSending = true;
