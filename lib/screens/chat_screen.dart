@@ -1124,17 +1124,24 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           // Text input
                           Expanded(
-                            child: TextField(
-                              controller: _messageController,
-                              onChanged: _onTextChanged,
-                              enabled: !_isLoading,
-                              decoration: InputDecoration(
-                                hintText: _isLoading ? 'Even geduld...' : 'Deel je blog idee...',
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minHeight: 48.0, // Single line height (24px text + 24px padding)
+                                maxHeight: 144.0, // 6 lines height (6 * 24px text + 24px padding)
                               ),
-                              maxLines: null,
-                              textInputAction: TextInputAction.newline,
+                              child: TextField(
+                                controller: _messageController,
+                                onChanged: _onTextChanged,
+                                enabled: !_isLoading,
+                                decoration: InputDecoration(
+                                  hintText: _isLoading ? 'Even geduld...' : 'Deel je blog idee...',
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                maxLines: null,
+                                textInputAction: TextInputAction.newline,
+                                scrollPhysics: const BouncingScrollPhysics(),
+                              ),
                             ),
                           ),
                           // Camera icon
