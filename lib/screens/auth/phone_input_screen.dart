@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/auth_service.dart';
 import 'sms_verification_screen.dart';
 
@@ -17,6 +19,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   final TextEditingController _countryCodeController = TextEditingController(text: '+31');
   bool _isLoading = false;
   String? _errorMessage;
+  bool _agreedToPrivacy = false;
 
   @override
   void dispose() {
@@ -52,7 +55,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   bool _isValidInput() {
     return _nameController.text.trim().isNotEmpty && 
            _isValidEmail() && 
-           _isValidPhoneNumber();
+           _isValidPhoneNumber() &&
+           _agreedToPrivacy;
   }
 
   Future<void> _sendSmsCode() async {
@@ -64,6 +68,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           _errorMessage = 'Voer een geldig e-mailadres in';
         } else if (!_isValidPhoneNumber()) {
           _errorMessage = 'Voer een geldig Nederlands mobiel nummer in (06xxxxxxxx of 6xxxxxxxx)';
+        } else if (!_agreedToPrivacy) {
+          _errorMessage = 'Je moet akkoord gaan met de privacyverklaring';
         }
       });
       return;
@@ -268,7 +274,33 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 ),
               ],
               
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              
+              // Privacy checkbox
+              CheckboxListTile(
+                title: Text.rich(TextSpan(
+                  text: "Ik ga akkoord met de ",
+                  children: [
+                    TextSpan(
+                      text: "privacyverklaring",
+                      style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () => launchUrl(Uri.parse('https://kwaaijongens.nl/privacy-app'))
+                    )
+                  ]
+                )),
+                value: _agreedToPrivacy,
+                onChanged: (value) => setState(() {
+                  _agreedToPrivacy = value ?? false;
+                  if (_errorMessage != null) {
+                    _errorMessage = null;
+                  }
+                }),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+              
+              const SizedBox(height: 16),
               
               // Send SMS button
               ElevatedButton(

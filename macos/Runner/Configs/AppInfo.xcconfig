@@ -12,3 +12,6 @@ PRODUCT_BUNDLE_IDENTIFIER = com.app.kwaaijongens
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.
+
+// The macOS deployment target
+MACOSX_DEPLOYMENT_TARGET = 10.15

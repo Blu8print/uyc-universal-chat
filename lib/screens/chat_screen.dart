@@ -4,20 +4,18 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
-import 'package:http_parser/http_parser.dart';
 import '../services/auth_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/session_service.dart';
 import '../services/storage_service.dart';
 import '../services/attachment_service.dart';
-import '../services/document_routing_service.dart';
-import '../services/network_service.dart';
 import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
 import '../widgets/document_message_widget.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 void main() {
   runApp(const MyApp());
@@ -123,6 +121,7 @@ class _ChatScreenState extends State<ChatScreen> {
       text: "Hallo $userName! Ik ben je AI-assistent van Kwaaijongens. Ik help $companyName graag met blog ideeën en content creatie. Waar kan ik je mee helpen?",
       isCustomer: false,
       timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
+      status: MessageStatus.sent,
     ));
   }
 
@@ -180,38 +179,27 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendMessage() async {
     if (_messageController.text.trim().isNotEmpty && !_isLoading) {
-      // Check connectivity first
-      final isOnline = await NetworkService.isOnline();
-      if (!isOnline) {
-        await _addErrorMessage('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.');
-        return;
-      }
-      
       final userMessage = _messageController.text.trim();
       
-      // Add user message immediately
-      await _addMessage(ChatMessage(
+      // Create new message with pending status
+      final newMessage = ChatMessage(
         text: userMessage,
         isCustomer: true,
         timestamp: DateTime.now(),
-      ));
+        status: MessageStatus.pending, // Start as pending
+      );
       
-      setState(() {
-        _isLoading = true;
-      });
+      // Add user message immediately
+      await _addMessage(newMessage);
       
       _messageController.clear();
-      _scrollToBottom();
-      
-      // Send to n8n and get response
-      await _sendToN8n(userMessage);
-      
       setState(() {
         _isTyping = false;
-        _isLoading = false;
       });
-      
       _scrollToBottom();
+      
+      // Send in bulk with all pending messages
+      await _sendBulkMessages(newMessage);
     }
   }
 
@@ -282,26 +270,12 @@ class _ChatScreenState extends State<ChatScreen> {
       text: errorText,
       isCustomer: false,
       timestamp: DateTime.now(),
+      status: MessageStatus.sent,
     ));
   }
 
   Future<void> _startRecording() async {
     print('DEBUG: Starting recording...');
-    
-    // Check connectivity first
-    final isOnline = await NetworkService.isOnline();
-    if (!isOnline) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-    
     final hasPermission = await _audioService.requestPermission();
     print('DEBUG: Recording permission granted: $hasPermission');
     
@@ -357,106 +331,22 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendAudioMessage(File audioFile) async {
-    // Check connectivity first
-    final isOnline = await NetworkService.isOnline();
-    if (!isOnline) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-    
-    setState(() {
-      _messages.add(
-        ChatMessage(
-          text: '🎤 Audio bericht (${_formatDuration(_recordingDuration)})',
-          isCustomer: true,
-          timestamp: DateTime.now(),
-          audioFile: audioFile,
-          attachmentType: AttachmentType.audio,
-        ),
-      );
-      _isLoading = true;
-    });
-    
+    // Create new audio message with pending status
+    final newMessage = ChatMessage(
+      text: '🎤 Audio bericht (${_formatDuration(_recordingDuration)})',
+      isCustomer: true,
+      timestamp: DateTime.now(),
+      audioFile: audioFile,
+      attachmentType: AttachmentType.audio,
+      status: MessageStatus.pending, // Start as pending
+    );
+
+    // Add message immediately
+    await _addMessage(newMessage);
     _scrollToBottom();
-    
-    try {
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse(_n8nChatUrl),
-      );
-      
-      request.fields['action'] = 'sendAudio';
-      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
-      request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
-      
-      // Add client data to form fields
-      final clientData = AuthService.getClientData();
-      if (clientData != null) {
-        request.fields['clientData'] = jsonEncode(clientData);
-      }
-      
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'audio',
-          audioFile.path,
-          filename: 'audio_message.m4a',
-        ),
-      );
-      
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-      
-      if (response.statusCode == 200) {
-        String botResponse = '';
-        
-        if (response.body.isEmpty) {
-          botResponse = 'Lege reactie ontvangen van server';
-        } else {
-          try {
-            final data = jsonDecode(response.body);
-            if (data is Map) {
-              botResponse = data['transcription'] ??
-                           data['output'] ??
-                           data['response'] ??
-                           data['message'] ??
-                           data['text'] ??
-                           'Audio ontvangen, maar geen transcriptie beschikbaar';
-            } else if (data is String) {
-              botResponse = data;
-            } else {
-              botResponse = 'Onverwacht response format';
-            }
-          } catch (e) {
-            botResponse = response.body.isNotEmpty ? response.body : 'Ongeldige server reactie';
-          }
-        }
-        
-        setState(() {
-          _messages.add(ChatMessage(
-            text: botResponse,
-            isCustomer: false,
-            timestamp: DateTime.now(),
-          ));
-        });
-      } else {
-        _addErrorMessage('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      // Error sending audio: $e
-      _addErrorMessage('Sorry, er ging iets mis bij het versturen van het audio bericht.');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-      _scrollToBottom();
-    }
+
+    // Send in bulk with all pending messages
+    await _sendBulkMessages(newMessage);
   }
 
   String _formatDuration(Duration duration) {
@@ -580,20 +470,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      // Check connectivity first
-      final isOnline = await NetworkService.isOnline();
-      if (!isOnline) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-        return;
-      }
-      
       // Request permissions
       if (source == ImageSource.camera) {
         final cameraStatus = await Permission.camera.request();
@@ -645,20 +521,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickMultipleImages() async {
     try {
-      // Check connectivity first
-      final isOnline = await NetworkService.isOnline();
-      if (!isOnline) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-        return;
-      }
-      
       // Request gallery permission
       final photosStatus = await Permission.photos.request();
       if (photosStatus.isDenied) {
@@ -722,126 +584,26 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendImageMessage(File imageFile) async {
-    // Check connectivity first
-    final isOnline = await NetworkService.isOnline();
-    if (!isOnline) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-    
-    setState(() {
-      _messages.add(
-        ChatMessage(
-          text: '📷 Afbeelding',
-          isCustomer: true,
-          timestamp: DateTime.now(),
-          imageFile: imageFile,
-          attachmentType: AttachmentType.image,
-        ),
-      );
-      _isLoading = true;
-    });
+    // Create new image message with pending status
+    final newMessage = ChatMessage(
+      text: '📷 Afbeelding',
+      isCustomer: true,
+      timestamp: DateTime.now(),
+      imageFile: imageFile,
+      attachmentType: AttachmentType.image,
+      status: MessageStatus.pending, // Start as pending
+    );
 
+    // Add message immediately
+    await _addMessage(newMessage);
     _scrollToBottom();
 
-    try {
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse(_n8nImageUrl),
-      );
-
-      request.fields['action'] = 'sendImage';
-      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
-      request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
-      
-      // Add client data to form fields
-      final clientData = AuthService.getClientData();
-      if (clientData != null) {
-        request.fields['clientData'] = jsonEncode(clientData);
-      }
-
-      final fileInfo = _getFileExtensionAndMimeType(imageFile.path);
-      
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'image',
-          imageFile.path,
-          filename: 'image_message.${fileInfo['extension']}',
-          contentType: MediaType.parse(fileInfo['mimeType']!),
-        ),
-      );
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        String botResponse = '';
-
-        if (response.body.isEmpty) {
-          botResponse = 'Afbeelding ontvangen, maar geen reactie van server';
-        } else {
-          try {
-            final data = jsonDecode(response.body);
-            if (data is Map) {
-              botResponse = data['description'] ??
-                           data['output'] ??
-                           data['response'] ??
-                           data['message'] ??
-                           data['text'] ??
-                           'Afbeelding ontvangen en geanalyseerd';
-            } else if (data is String) {
-              botResponse = data;
-            } else {
-              botResponse = 'Onverwacht response format';
-            }
-          } catch (e) {
-            botResponse = response.body.isNotEmpty ? response.body : 'Ongeldige server reactie';
-          }
-        }
-
-        setState(() {
-          _messages.add(ChatMessage(
-            text: botResponse,
-            isCustomer: false,
-            timestamp: DateTime.now(),
-          ));
-        });
-      } else {
-        _addErrorMessage('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      _addErrorMessage('Sorry, er ging iets mis bij het versturen van de afbeelding.');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-      _scrollToBottom();
-    }
+    // Send in bulk with all pending messages
+    await _sendBulkMessages(newMessage);
   }
 
   Future<void> _pickDocument() async {
     try {
-      // Check connectivity first
-      final isOnline = await NetworkService.isOnline();
-      if (!isOnline) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-        return;
-      }
-      
       final documentFile = await AttachmentService.pickDocument();
       if (documentFile != null) {
         await _sendDocumentMessage(documentFile);
@@ -858,112 +620,24 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendDocumentMessage(File documentFile) async {
-    // Check connectivity first
-    final isOnline = await NetworkService.isOnline();
-    if (!isOnline) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-    
     final fileInfo = AttachmentService.getFileInfo(documentFile);
     
-    setState(() {
-      _messages.add(
-        ChatMessage(
-          text: '📄 ${fileInfo['fileName']}',
-          isCustomer: true,
-          timestamp: DateTime.now(),
-          documentFile: documentFile,
-          attachmentType: AttachmentType.document,
-        ),
-      );
-      _isLoading = true;
-    });
+    // Create new document message with pending status
+    final newMessage = ChatMessage(
+      text: '📄 ${fileInfo['fileName']}',
+      isCustomer: true,
+      timestamp: DateTime.now(),
+      documentFile: documentFile,
+      attachmentType: AttachmentType.document,
+      status: MessageStatus.pending, // Start as pending
+    );
 
+    // Add message immediately
+    await _addMessage(newMessage);
     _scrollToBottom();
 
-    try {
-      final webhookUrl = DocumentRoutingService.getWebhookUrl(fileInfo['extension']);
-      
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse(webhookUrl),
-      );
-
-      request.fields['action'] = 'sendDocument';
-      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
-      request.fields['fileType'] = fileInfo['extension'];
-      request.fields['fileName'] = fileInfo['fileName'];
-      request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
-      
-      // Add client data to form fields
-      final clientData = AuthService.getClientData();
-      if (clientData != null) {
-        request.fields['clientData'] = jsonEncode(clientData);
-      }
-
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'document',
-          documentFile.path,
-          filename: fileInfo['fileName'],
-          contentType: MediaType.parse(fileInfo['mimeType']),
-        ),
-      );
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        String botResponse = '';
-
-        if (response.body.isEmpty) {
-          botResponse = 'Document ontvangen, maar geen reactie van server';
-        } else {
-          try {
-            final data = jsonDecode(response.body);
-            if (data is Map) {
-              botResponse = data['analysis'] ??
-                           data['output'] ??
-                           data['response'] ??
-                           data['message'] ??
-                           data['text'] ??
-                           'Document ontvangen en geanalyseerd';
-            } else if (data is String) {
-              botResponse = data;
-            } else {
-              botResponse = 'Onverwacht response format';
-            }
-          } catch (e) {
-            botResponse = response.body.isNotEmpty ? response.body : 'Ongeldige server reactie';
-          }
-        }
-
-        setState(() {
-          _messages.add(ChatMessage(
-            text: botResponse,
-            isCustomer: false,
-            timestamp: DateTime.now(),
-          ));
-        });
-      } else {
-        _addErrorMessage('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      _addErrorMessage('Sorry, er ging iets mis bij het versturen van het document.');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-      _scrollToBottom();
-    }
+    // Send in bulk with all pending messages
+    await _sendBulkMessages(newMessage);
   }
 
 
@@ -973,22 +647,307 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  // Get all pending messages in chronological order
+  List<ChatMessage> _getPendingMessages() {
+    return _messages
+        .where((msg) => msg.isCustomer && msg.status == MessageStatus.pending)
+        .toList();
+  }
+
+  // Mark messages as sent
+  void _markMessagesAsSent(List<ChatMessage> messages) {
+    setState(() {
+      for (int i = 0; i < _messages.length; i++) {
+        for (var sentMessage in messages) {
+          if (_messages[i].timestamp == sentMessage.timestamp &&
+              _messages[i].text == sentMessage.text) {
+            _messages[i] = ChatMessage(
+              text: _messages[i].text,
+              isCustomer: _messages[i].isCustomer,
+              timestamp: _messages[i].timestamp,
+              audioFile: _messages[i].audioFile,
+              imageFile: _messages[i].imageFile,
+              documentFile: _messages[i].documentFile,
+              attachmentType: _messages[i].attachmentType,
+              status: MessageStatus.sent,
+            );
+            break;
+          }
+        }
+      }
+    });
+    _saveMessages();
+  }
+
+  // Bulk send all pending messages plus new message
+  Future<void> _sendBulkMessages(ChatMessage newMessage) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Get all pending messages and add the new one
+      List<ChatMessage> pendingMessages = _getPendingMessages();
+      List<ChatMessage> allMessagesToSend = [...pendingMessages, newMessage];
+
+      // Separate text messages from file messages
+      List<ChatMessage> textMessages = allMessagesToSend
+          .where((msg) => msg.attachmentType == AttachmentType.none)
+          .toList();
+      List<ChatMessage> fileMessages = allMessagesToSend
+          .where((msg) => msg.attachmentType != AttachmentType.none)
+          .toList();
+
+      // Send text messages in bulk if any exist
+      if (textMessages.isNotEmpty) {
+        await _sendBulkTextMessages(textMessages);
+      }
+
+      // Send file messages individually
+      for (var fileMessage in fileMessages) {
+        await _sendIndividualFileMessage(fileMessage);
+      }
+
+      // Mark all messages as sent after successful bulk operation
+      _markMessagesAsSent(allMessagesToSend);
+
+    } catch (e) {
+      print('Bulk send failed: $e');
+      _addErrorMessage('Sorry, er ging iets mis bij het versturen van berichten.');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+      _scrollToBottom();
+    }
+  }
+
+  // Send text messages individually (but in sequence)
+  Future<void> _sendBulkTextMessages(List<ChatMessage> textMessages) async {
+    if (textMessages.isEmpty) return;
+
+    // Send the last (newest) text message to get a bot response
+    final lastMessage = textMessages.last;
+    
+    final response = await http.post(
+      Uri.parse(_n8nChatUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+      },
+      body: jsonEncode({
+        'action': 'sendMessage',
+        'sessionId': SessionService.currentSessionId ?? 'no-session',
+        'chatInput': lastMessage.text,
+        'clientData': AuthService.getClientData(),
+      }),
+    ).timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      String botResponse = '';
+      
+      if (response.body.isEmpty) {
+        botResponse = 'Bericht ontvangen';
+      } else {
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map) {
+            botResponse = data['output'] ?? 
+                         data['response'] ?? 
+                         data['message'] ?? 
+                         data['reply'] ?? 
+                         data['text'] ??
+                         'Bericht ontvangen en verwerkt';
+          } else if (data is String) {
+            botResponse = data;
+          } else {
+            botResponse = 'Bericht ontvangen en verwerkt';
+          }
+        } catch (e) {
+          botResponse = response.body.isNotEmpty ? response.body : 'Bericht ontvangen en verwerkt';
+        }
+      }
+
+      setState(() {
+        _messages.add(ChatMessage(
+          text: botResponse,
+          isCustomer: false,
+          timestamp: DateTime.now(),
+          status: MessageStatus.sent,
+        ));
+      });
+    } else {
+      throw Exception('Failed to send text messages: ${response.statusCode}');
+    }
+  }
+
+  // Send individual file message
+  Future<void> _sendIndividualFileMessage(ChatMessage fileMessage) async {
+    if (fileMessage.attachmentType == AttachmentType.image && fileMessage.imageFile != null) {
+      await _sendImageFileMessage(fileMessage);
+    } else if (fileMessage.attachmentType == AttachmentType.audio && fileMessage.audioFile != null) {
+      await _sendAudioFileMessage(fileMessage);
+    } else if (fileMessage.attachmentType == AttachmentType.document && fileMessage.documentFile != null) {
+      await _sendDocumentFileMessage(fileMessage);
+    }
+  }
+
+  // Send image file message
+  Future<void> _sendImageFileMessage(ChatMessage message) async {
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse(_n8nImageUrl),
+    );
+
+    request.fields['action'] = 'sendImage';
+    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+    
+    final clientData = AuthService.getClientData();
+    if (clientData != null) {
+      request.fields['clientData'] = jsonEncode(clientData);
+    }
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'image',
+        message.imageFile!.path,
+        filename: 'image.jpg',
+      ),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      String botResponse = '';
+
+      if (response.body.isEmpty) {
+        botResponse = 'Afbeelding ontvangen';
+      } else {
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map) {
+            botResponse = data['analysis'] ??
+                         data['output'] ??
+                         data['response'] ??
+                         data['message'] ??
+                         data['text'] ??
+                         'Afbeelding ontvangen en geanalyseerd';
+          } else if (data is String) {
+            botResponse = data;
+          }
+        } catch (e) {
+          botResponse = response.body.isNotEmpty ? response.body : 'Afbeelding ontvangen en geanalyseerd';
+        }
+      }
+
+      setState(() {
+        _messages.add(ChatMessage(
+          text: botResponse,
+          isCustomer: false,
+          timestamp: DateTime.now(),
+          status: MessageStatus.sent,
+        ));
+      });
+    } else {
+      throw Exception('Failed to send image: ${response.statusCode}');
+    }
+  }
+
+  // Send audio file message (simplified version)
+  Future<void> _sendAudioFileMessage(ChatMessage message) async {
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse(_n8nChatUrl),
+    );
+    
+    request.fields['action'] = 'sendAudio';
+    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+    
+    final clientData = AuthService.getClientData();
+    if (clientData != null) {
+      request.fields['clientData'] = jsonEncode(clientData);
+    }
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'audio',
+        message.audioFile!.path,
+        filename: 'audio.m4a',
+      ),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      String botResponse = response.body.isNotEmpty ? response.body : 'Audio ontvangen en getranscribeerd';
+      
+      setState(() {
+        _messages.add(ChatMessage(
+          text: botResponse,
+          isCustomer: false,
+          timestamp: DateTime.now(),
+          status: MessageStatus.sent,
+        ));
+      });
+    } else {
+      throw Exception('Failed to send audio: ${response.statusCode}');
+    }
+  }
+
+  // Send document file message (simplified version)
+  Future<void> _sendDocumentFileMessage(ChatMessage message) async {
+    final user = AuthService.currentUser;
+    final webhookUrl = user?.webhookUrl ?? _n8nChatUrl;
+    
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse(webhookUrl),
+    );
+
+    request.fields['action'] = 'sendDocument';
+    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+    
+    final clientData = AuthService.getClientData();
+    if (clientData != null) {
+      request.fields['clientData'] = jsonEncode(clientData);
+    }
+
+    final fileInfo = AttachmentService.getFileInfo(message.documentFile!);
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'document',
+        message.documentFile!.path,
+        filename: fileInfo['fileName'],
+      ),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      String botResponse = response.body.isNotEmpty ? response.body : 'Document ontvangen en geanalyseerd';
+      
+      setState(() {
+        _messages.add(ChatMessage(
+          text: botResponse,
+          isCustomer: false,
+          timestamp: DateTime.now(),
+          status: MessageStatus.sent,
+        ));
+      });
+    } else {
+      throw Exception('Failed to send document: ${response.statusCode}');
+    }
+  }
+
   Future<void> _sendEmail() async {
     if (_isEmailSending) return;
-    
-    // Check connectivity first
-    final isOnline = await NetworkService.isOnline();
-    if (!isOnline) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sorry, onze app is ontworpen om alleen online te functioneren. Controleer je internetverbinding en probeer opnieuw.'),
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
     
     setState(() {
       _isEmailSending = true;
@@ -1000,6 +959,7 @@ class _ChatScreenState extends State<ChatScreen> {
         text: "Email wordt verzonden...",
         isCustomer: false,
         timestamp: DateTime.now(),
+        status: MessageStatus.sent,
       ));
     });
     
@@ -1065,6 +1025,7 @@ class _ChatScreenState extends State<ChatScreen> {
             text: emailResponse,
             isCustomer: false,
             timestamp: DateTime.now(),
+            status: MessageStatus.sent,
           ));
         });
       } else {
@@ -1086,6 +1047,7 @@ class _ChatScreenState extends State<ChatScreen> {
             text: errorMessage,
             isCustomer: false,
             timestamp: DateTime.now(),
+            status: MessageStatus.sent,
           ));
         });
       }
@@ -1096,6 +1058,7 @@ class _ChatScreenState extends State<ChatScreen> {
           text: 'Email verzenden mislukt: Controleer je internetverbinding en probeer het opnieuw.',
           isCustomer: false,
           timestamp: DateTime.now(),
+          status: MessageStatus.sent,
         ));
       });
     } finally {
@@ -1103,6 +1066,214 @@ class _ChatScreenState extends State<ChatScreen> {
         _isEmailSending = false;
       });
       _scrollToBottom();
+    }
+  }
+
+  void _handleMenuSelection(String value) {
+    switch (value) {
+      case 'forward_conversation':
+        _sendEmail();
+        break;
+      case 'call_kwaaijongens':
+        _callKwaaijongens();
+        break;
+      case 'privacy_policy':
+        _openPrivacyPolicy();
+        break;
+      case 'help_support':
+        _openHelpSupport();
+        break;
+      case 'about_app':
+        _showAboutDialog();
+        break;
+    }
+  }
+
+  Future<void> _callKwaaijongens() async {
+    final Uri phoneUri = Uri.parse('tel:+31853307500');
+    if (await canLaunchUrl(phoneUri)) {
+      await launchUrl(phoneUri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kan telefoon app niet openen'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    final Uri privacyUri = Uri.parse('https://kwaaijongens.nl/privacy-app');
+    if (await canLaunchUrl(privacyUri)) {
+      await launchUrl(privacyUri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kan browser niet openen'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openHelpSupport() async {
+    final Uri supportUri = Uri.parse('https://kwaaijongens.nl/app-support');
+    if (await canLaunchUrl(supportUri)) {
+      await launchUrl(supportUri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kan browser niet openen'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAboutDialog() async {
+    PackageInfo packageInfo = await PackageInfo.fromPlatform();
+    
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Logo
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFCC0001),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'K',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // App name
+                  const Text(
+                    'Kwaaijongens APP',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Version
+                  Text(
+                    'Versie ${packageInfo.version}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Developer info
+                  const Text(
+                    'Kwaaijongens WordPress bureau',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Contact details
+                  GestureDetector(
+                    onTap: () => _callKwaaijongens(),
+                    child: const Text(
+                      '085 - 330 7500',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFFCC0001),
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      final Uri emailUri = Uri.parse('mailto:app@kwaaijongens.nl');
+                      if (await canLaunchUrl(emailUri)) {
+                        await launchUrl(emailUri);
+                      }
+                    },
+                    child: const Text(
+                      'app@kwaaijongens.nl',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFFCC0001),
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      final Uri websiteUri = Uri.parse('https://www.kwaaijongens.nl');
+                      if (await canLaunchUrl(websiteUri)) {
+                        await launchUrl(websiteUri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                    child: const Text(
+                      'www.kwaaijongens.nl',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFFCC0001),
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Close button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFCC0001),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text(
+                        'Sluiten',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
     }
   }
 
@@ -1175,6 +1346,103 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   )
                 : const Icon(Icons.email),
+          ),
+          Transform.translate(
+            offset: const Offset(-8, 0),
+            child: PopupMenuButton<String>(
+            onSelected: _handleMenuSelection,
+            icon: const Icon(Icons.more_vert),
+            offset: const Offset(0, 40),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            color: Colors.white,
+            elevation: 8,
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem<String>(
+                value: 'forward_conversation',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.mail, color: Colors.grey, size: 20),
+                      SizedBox(width: 12),
+                      Text(
+                        'Gesprek doorsturen',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'call_kwaaijongens',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.phone, color: Colors.grey, size: 20),
+                      SizedBox(width: 12),
+                      Text(
+                        'Bel Kwaaijongens',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem<String>(
+                value: 'privacy_policy',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.shield, color: Colors.grey, size: 20),
+                      SizedBox(width: 12),
+                      Text(
+                        'Privacyverklaring',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'help_support',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.help_center, color: Colors.grey, size: 20),
+                      SizedBox(width: 12),
+                      Text(
+                        'Help & Support',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem<String>(
+                value: 'about_app',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info, color: Colors.grey, size: 20),
+                      SizedBox(width: 12),
+                      Text(
+                        'Over deze app',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
           ),
         ],
       ),
@@ -1320,6 +1588,8 @@ enum AttachmentType {
   document,
 }
 
+enum MessageStatus { pending, sent }
+
 class ChatMessage {
   final String text;
   final bool isCustomer;
@@ -1328,6 +1598,7 @@ class ChatMessage {
   final File? imageFile;
   final File? documentFile;
   final AttachmentType attachmentType;
+  final MessageStatus status;
 
   ChatMessage({
     required this.text,
@@ -1337,6 +1608,7 @@ class ChatMessage {
     this.imageFile,
     this.documentFile,
     this.attachmentType = AttachmentType.none,
+    this.status = MessageStatus.pending,
   });
 
   // Convert to JSON for storage (files stored as paths)
@@ -1349,6 +1621,7 @@ class ChatMessage {
       'imageFilePath': imageFile?.path,
       'documentFilePath': documentFile?.path,
       'attachmentType': attachmentType.toString(),
+      'status': status.toString(),
     };
   }
 
@@ -1368,6 +1641,7 @@ class ChatMessage {
           ? File(json['documentFilePath']) 
           : null,
       attachmentType: _parseAttachmentType(json['attachmentType']),
+      status: _parseMessageStatus(json['status']),
     );
   }
 
@@ -1382,6 +1656,17 @@ class ChatMessage {
         return AttachmentType.document;
       default:
         return AttachmentType.none;
+    }
+  }
+
+  // Helper to parse message status from string
+  static MessageStatus _parseMessageStatus(String? statusString) {
+    switch (statusString) {
+      case 'MessageStatus.sent':
+        return MessageStatus.sent;
+      case 'MessageStatus.pending':
+      default:
+        return MessageStatus.pending;
     }
   }
 }
@@ -1413,95 +1698,110 @@ class ChatBubble extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
-              ),
-              decoration: BoxDecoration(
-                color: message.isCustomer 
-                    ? const Color(0xFFCC0001) 
-                    : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (message.attachmentType == AttachmentType.audio && message.audioFile != null)
-                    AudioMessageWidget(
-                      audioFile: message.audioFile!,
-                      isCustomer: message.isCustomer,
-                      duration: message.text.replaceAll('🎤 Audio bericht (', '').replaceAll(')', ''),
-                    )
-                  else if (message.attachmentType == AttachmentType.image && message.imageFile != null)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ImageMessageWidget(
-                          imageFile: message.imageFile!,
+            child: Stack(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: message.isCustomer 
+                        ? const Color(0xFFCC0001) 
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (message.attachmentType == AttachmentType.audio && message.audioFile != null)
+                        AudioMessageWidget(
+                          audioFile: message.audioFile!,
                           isCustomer: message.isCustomer,
+                          duration: message.text.replaceAll('🎤 Audio bericht (', '').replaceAll(')', ''),
+                        )
+                      else if (message.attachmentType == AttachmentType.image && message.imageFile != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ImageMessageWidget(
+                              imageFile: message.imageFile!,
+                              isCustomer: message.isCustomer,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatTime(message.timestamp),
+                              style: TextStyle(
+                                color: message.isCustomer 
+                                    ? Colors.white70 
+                                    : Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        )
+                      else if (message.attachmentType == AttachmentType.document && message.documentFile != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            DocumentMessageWidget(
+                              documentFile: message.documentFile!,
+                              isCustomer: message.isCustomer,
+                              fileName: AttachmentService.getFileInfo(message.documentFile!)['fileName'],
+                              fileSize: AttachmentService.getFileInfo(message.documentFile!)['size'],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatTime(message.timestamp),
+                              style: TextStyle(
+                                color: message.isCustomer 
+                                    ? Colors.white70 
+                                    : Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            LinkableSelectableText(
+                              text: message.text,
+                              style: TextStyle(
+                                color: message.isCustomer 
+                                    ? Colors.white 
+                                    : Colors.black87,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatTime(message.timestamp),
+                              style: TextStyle(
+                                color: message.isCustomer 
+                                    ? Colors.white70 
+                                    : Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatTime(message.timestamp),
-                          style: TextStyle(
-                            color: message.isCustomer 
-                                ? Colors.white70 
-                                : Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    )
-                  else if (message.attachmentType == AttachmentType.document && message.documentFile != null)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        DocumentMessageWidget(
-                          documentFile: message.documentFile!,
-                          isCustomer: message.isCustomer,
-                          fileName: AttachmentService.getFileInfo(message.documentFile!)['fileName'],
-                          fileSize: AttachmentService.getFileInfo(message.documentFile!)['size'],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatTime(message.timestamp),
-                          style: TextStyle(
-                            color: message.isCustomer 
-                                ? Colors.white70 
-                                : Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    )
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        LinkableSelectableText(
-                          text: message.text,
-                          style: TextStyle(
-                            color: message.isCustomer 
-                                ? Colors.white 
-                                : Colors.black87,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatTime(message.timestamp),
-                          style: TextStyle(
-                            color: message.isCustomer 
-                                ? Colors.white70 
-                                : Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+                    ],
+                  ),
+                ),
+                // Status icon for pending customer messages
+                if (message.isCustomer && message.status == MessageStatus.pending)
+                  Positioned(
+                    bottom: 4,
+                    right: 4,
+                    child: Icon(
+                      Icons.hourglass_empty,
+                      size: 14,
+                      color: Colors.white70,
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
           if (message.isCustomer) ...[
