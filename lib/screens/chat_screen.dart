@@ -223,32 +223,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // Log response details for debugging
       
       if (response.statusCode == 200) {
-        String botResponse = '';
-        
-        // Check if response body is empty
-        if (response.body.isEmpty) {
-          botResponse = 'Lege reactie ontvangen van server';
-        } else {
-          try {
-            final data = jsonDecode(response.body);
-            // Handle n8n chat trigger response format
-            if (data is Map) {
-              botResponse = data['output'] ?? 
-                           data['response'] ?? 
-                           data['message'] ?? 
-                           data['reply'] ?? 
-                           data['text'] ??
-                           'Geen reactie ontvangen';
-            } else if (data is String) {
-              botResponse = data;
-            } else {
-              botResponse = 'Onverwacht response format';
-            }
-          } catch (e) {
-            // If JSON parsing fails, use the raw response
-            botResponse = response.body.isNotEmpty ? response.body : 'Ongeldige server reactie';
-          }
-        }
+        String botResponse = _parseWebhookResponse(response.body, 'Geen reactie ontvangen');
         
         // Add bot response
         await _addMessage(ChatMessage(
@@ -354,6 +329,42 @@ class _ChatScreenState extends State<ChatScreen> {
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
     return '$minutes:$seconds';
+  }
+
+  // Standardized webhook response parsing
+  String _parseWebhookResponse(String responseBody, String defaultMessage) {
+    if (responseBody.isEmpty) {
+      return defaultMessage;
+    }
+    
+    // Check if response contains HTML iframe with srcdoc attribute
+    if (responseBody.contains('<iframe') && responseBody.contains('srcdoc=')) {
+      final RegExp iframeRegex = RegExp(r'srcdoc="([^"]*)"');
+      final Match? match = iframeRegex.firstMatch(responseBody);
+      if (match != null && match.group(1) != null) {
+        return match.group(1)!;
+      }
+    }
+    
+    try {
+      final data = jsonDecode(responseBody);
+      if (data is Map) {
+        return data['output'] ?? 
+               data['response'] ?? 
+               data['message'] ?? 
+               data['reply'] ?? 
+               data['text'] ??
+               data['analysis'] ??
+               defaultMessage;
+      } else if (data is String) {
+        return data;
+      } else {
+        return defaultMessage;
+      }
+    } catch (e) {
+      // If JSON parsing fails, use the raw response if it's not empty
+      return responseBody.isNotEmpty ? responseBody : defaultMessage;
+    }
   }
 
   Map<String, String> _getFileExtensionAndMimeType(String filePath) {
@@ -686,9 +697,8 @@ class _ChatScreenState extends State<ChatScreen> {
         _isLoading = true;
       });
 
-      // Get all pending messages and add the new one
-      List<ChatMessage> pendingMessages = _getPendingMessages();
-      List<ChatMessage> allMessagesToSend = [...pendingMessages, newMessage];
+      // Get all pending messages (which already includes the new message)
+      List<ChatMessage> allMessagesToSend = _getPendingMessages();
 
       // Separate text messages from file messages
       List<ChatMessage> textMessages = allMessagesToSend
@@ -745,29 +755,7 @@ class _ChatScreenState extends State<ChatScreen> {
     ).timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 200) {
-      String botResponse = '';
-      
-      if (response.body.isEmpty) {
-        botResponse = 'Bericht ontvangen';
-      } else {
-        try {
-          final data = jsonDecode(response.body);
-          if (data is Map) {
-            botResponse = data['output'] ?? 
-                         data['response'] ?? 
-                         data['message'] ?? 
-                         data['reply'] ?? 
-                         data['text'] ??
-                         'Bericht ontvangen en verwerkt';
-          } else if (data is String) {
-            botResponse = data;
-          } else {
-            botResponse = 'Bericht ontvangen en verwerkt';
-          }
-        } catch (e) {
-          botResponse = response.body.isNotEmpty ? response.body : 'Bericht ontvangen en verwerkt';
-        }
-      }
+      String botResponse = _parseWebhookResponse(response.body, 'Bericht ontvangen en verwerkt');
 
       setState(() {
         _messages.add(ChatMessage(
@@ -821,27 +809,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      String botResponse = '';
-
-      if (response.body.isEmpty) {
-        botResponse = 'Afbeelding ontvangen';
-      } else {
-        try {
-          final data = jsonDecode(response.body);
-          if (data is Map) {
-            botResponse = data['analysis'] ??
-                         data['output'] ??
-                         data['response'] ??
-                         data['message'] ??
-                         data['text'] ??
-                         'Afbeelding ontvangen en geanalyseerd';
-          } else if (data is String) {
-            botResponse = data;
-          }
-        } catch (e) {
-          botResponse = response.body.isNotEmpty ? response.body : 'Afbeelding ontvangen en geanalyseerd';
-        }
-      }
+      String botResponse = _parseWebhookResponse(response.body, 'Afbeelding ontvangen en geanalyseerd');
 
       setState(() {
         _messages.add(ChatMessage(
@@ -884,7 +852,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      String botResponse = response.body.isNotEmpty ? response.body : 'Audio ontvangen en getranscribeerd';
+      String botResponse = _parseWebhookResponse(response.body, 'Audio ontvangen en getranscribeerd');
       
       setState(() {
         _messages.add(ChatMessage(
@@ -931,7 +899,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      String botResponse = response.body.isNotEmpty ? response.body : 'Document ontvangen en geanalyseerd';
+      String botResponse = _parseWebhookResponse(response.body, 'Document ontvangen en geanalyseerd');
       
       setState(() {
         _messages.add(ChatMessage(
@@ -995,30 +963,7 @@ class _ChatScreenState extends State<ChatScreen> {
         
         String emailResponse = '';
         
-        // Check if response body is empty
-        if (response.body.isEmpty) {
-          emailResponse = 'Email succesvol verzonden';
-        } else {
-          try {
-            final data = jsonDecode(response.body);
-            // Handle webhook response format - check for common response fields
-            if (data is Map) {
-              emailResponse = data['output'] ?? 
-                           data['response'] ?? 
-                           data['message'] ?? 
-                           data['reply'] ?? 
-                           data['text'] ??
-                           'Email succesvol verzonden';
-            } else if (data is String) {
-              emailResponse = data;
-            } else {
-              emailResponse = 'Email succesvol verzonden';
-            }
-          } catch (e) {
-            // If JSON parsing fails, use the raw response or default message
-            emailResponse = response.body.isNotEmpty ? response.body : 'Email succesvol verzonden';
-          }
-        }
+        emailResponse = _parseWebhookResponse(response.body, 'Email succesvol verzonden');
         
         setState(() {
           _messages.add(ChatMessage(
