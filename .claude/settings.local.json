@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(flutter run:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(flutter:*)",
+      "Bash(mkdir:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(sips:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(chmod:*)",
+      "Bash(./scripts/build_testflight.sh:*)",
+      "Bash(ls:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git reset:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": []
+  }
+}
