@@ -9,6 +9,8 @@ import '../services/audio_recording_service.dart';
 import '../services/session_service.dart';
 import '../services/storage_service.dart';
 import '../services/attachment_service.dart';
+import '../services/firebase_messaging_service.dart';
+import '../services/api_service.dart';
 import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
 import '../widgets/document_message_widget.dart';
@@ -84,6 +86,30 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initializeServices() async {
     await SessionService.initialize();
+    await _initializeFirebaseMessaging();
+  }
+
+  Future<void> _initializeFirebaseMessaging() async {
+    try {
+      await FirebaseMessagingService.initialize();
+      
+      // Set message handler for foreground notifications
+      FirebaseMessagingService.setMessageHandler(_handleFCMMessage);
+      
+      // Register FCM token with n8n backend
+      final tokenData = FirebaseMessagingService.getTokenData();
+      if (tokenData != null) {
+        final user = AuthService.currentUser;
+        await ApiService.sendFCMToken(
+          fcmToken: tokenData['fcmToken'],
+          sessionId: tokenData['sessionId'],
+          platform: tokenData['platform'],
+          phoneNumber: user?.phone,
+        );
+      }
+    } catch (e) {
+      print('Firebase Messaging initialization failed: $e');
+    }
   }
 
   Future<void> _requestInitialPermissions() async {
@@ -154,6 +180,31 @@ class _ChatScreenState extends State<ChatScreen> {
       _messages.add(message);
     });
     await _saveMessages();
+  }
+
+  // Handle FCM messages received while app is in foreground
+  void _handleFCMMessage(Map<String, dynamic> messageData) {
+    try {
+      // Extract message content from FCM data
+      final String? messageText = messageData['message'] ?? messageData['body'] ?? messageData['content'];
+      final String? sessionId = messageData['sessionId'];
+      
+      // Only process messages for current session
+      if (sessionId != null && sessionId == SessionService.currentSessionId && messageText != null) {
+        final fcmMessage = ChatMessage(
+          text: messageText,
+          isCustomer: false, // FCM messages are from the bot/system
+          timestamp: DateTime.now(),
+          status: MessageStatus.sent,
+          fromFCM: true, // Mark this message as coming from FCM
+        );
+        
+        _addMessage(fcmMessage);
+        _scrollToBottom();
+      }
+    } catch (e) {
+      print('Error handling FCM message: $e');
+    }
   }
 
   @override
@@ -681,6 +732,7 @@ class _ChatScreenState extends State<ChatScreen> {
               documentFile: _messages[i].documentFile,
               attachmentType: _messages[i].attachmentType,
               status: MessageStatus.sent,
+              fromFCM: _messages[i].fromFCM,
             );
             break;
           }
@@ -1544,6 +1596,7 @@ class ChatMessage {
   final File? documentFile;
   final AttachmentType attachmentType;
   final MessageStatus status;
+  final bool fromFCM;
 
   ChatMessage({
     required this.text,
@@ -1554,6 +1607,7 @@ class ChatMessage {
     this.documentFile,
     this.attachmentType = AttachmentType.none,
     this.status = MessageStatus.pending,
+    this.fromFCM = false,
   });
 
   // Convert to JSON for storage (files stored as paths)
@@ -1567,6 +1621,7 @@ class ChatMessage {
       'documentFilePath': documentFile?.path,
       'attachmentType': attachmentType.toString(),
       'status': status.toString(),
+      'fromFCM': fromFCM,
     };
   }
 
@@ -1587,6 +1642,7 @@ class ChatMessage {
           : null,
       attachmentType: _parseAttachmentType(json['attachmentType']),
       status: _parseMessageStatus(json['status']),
+      fromFCM: json['fromFCM'] ?? false,
     );
   }
 

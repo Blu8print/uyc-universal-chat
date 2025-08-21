@@ -6,6 +6,7 @@ class ApiService {
   static const String _sendSmsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/send-sms';
   static const String _verifySmsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/verify-sms';
   static const String _versionCheckUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/version-check';
+  static const String _fcmTokenUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/fcm-token';
   
   // Send SMS verification code
   static Future<ApiResponse> sendSmsCode(String phoneNumber, String name, String email) async {
@@ -98,6 +99,50 @@ class ApiService {
       }
     } catch (e) {
       return ApiResponse(success: false, message: 'Netwerkfout. Controleer je internetverbinding.');
+    }
+  }
+
+  // Send FCM token to n8n backend
+  static Future<ApiResponse> sendFCMToken({
+    required String fcmToken,
+    required String sessionId,
+    required String platform,
+    String? phoneNumber,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_fcmTokenUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Session-ID': sessionId,
+        },
+        body: jsonEncode({
+          'action': 'registerToken',
+          'fcmToken': fcmToken,
+          'sessionId': sessionId,
+          'platform': platform,
+          'phoneNumber': phoneNumber,
+          'timestamp': DateTime.now().toIso8601String(),
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        return ApiResponse(
+          success: true, 
+          message: 'FCM token registered successfully'
+        );
+      } else {
+        return ApiResponse(
+          success: false, 
+          message: 'Failed to register FCM token: ${response.statusCode}'
+        );
+      }
+    } catch (e) {
+      return ApiResponse(
+        success: false, 
+        message: 'Network error registering FCM token: $e'
+      );
     }
   }
 

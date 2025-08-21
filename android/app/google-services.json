@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "477728753902",
+    "project_id": "kwaaijongens-app-88f1d",
+    "storage_bucket": "kwaaijongens-app-88f1d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:477728753902:android:bdd984041c0b33fa444bff",
+        "android_client_info": {
+          "package_name": "com.app.kwaaijongens"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCm0U-4BaCXusgThG3WeenS9OAjn7F7v8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

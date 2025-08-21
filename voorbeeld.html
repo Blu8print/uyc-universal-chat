@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kwaaijongens - Projectinformatie</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .phone-container {
+            width: 100%;
+            max-width: 390px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        /* Header */
+        .app-header {
+            background: white;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .app-title {
+            color: #CC0001;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .menu-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            position: relative;
+        }
+
+        .menu-dots {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .dot {
+            width: 4px;
+            height: 4px;
+            background: #333;
+            border-radius: 50%;
+        }
+
+        /* Content */
+        .content-area {
+            padding: 20px;
+            background: white;
+        }
+
+        .section-title {
+            color: #CC0001;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .main-title {
+            color: #1a1a1a;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .info-card {
+            background: #f8f8f8;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .intro-text {
+            color: #333;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .questions-list {
+            list-style: none;
+        }
+
+        .question-item {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.8;
+            padding-left: 20px;
+            position: relative;
+            margin-bottom: 12px;
+        }
+
+        .question-item:before {
+            content: "-";
+            position: absolute;
+            left: 8px;
+            color: #999;
+        }
+
+        /* Input sectie */
+        .input-section {
+            background: white;
+            padding: 16px 20px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: #f8f8f8;
+            border-radius: 24px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+        }
+
+        .input-field {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            font-size: 16px;
+            color: #333;
+            padding-right: 12px;
+        }
+
+        .input-field::placeholder {
+            color: #999;
+        }
+
+        .voice-button {
+            width: 40px;
+            height: 40px;
+            background: #CC0001;
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .voice-button:hover {
+            background: #b30001;
+            transform: scale(1.05);
+        }
+
+        .voice-button:active {
+            transform: scale(0.95);
+        }
+
+        /* Action buttons */
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding: 0 20px;
+            align-items: center;
+        }
+
+        .action-btn {
+            flex: 0 0 auto;
+            width: 80px;
+            background: #CC0001;
+            border: none;
+            border-radius: 12px;
+            padding: 16px 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .action-btn:hover {
+            background: #b30001;
+            transform: translateY(-2px);
+        }
+
+        .action-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+        }
+
+        .action-label {
+            color: white;
+            font-size: 11px;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        .file-info-text {
+            flex: 1;
+            color: #666;
+            font-size: 12px;
+            line-height: 1.3;
+            padding-left: 8px;
+        }
+
+        /* Submit button */
+        .submit-button {
+            width: calc(100% - 40px);
+            margin: 0 20px 20px;
+            background: #CC0001;
+            color: white;
+            border: none;
+            border-radius: 24px;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .submit-button:hover {
+            background: #b30001;
+            transform: translateY(-1px);
+        }
+
+        .submit-button:active {
+            transform: translateY(0);
+        }
+
+        /* Bottom navigation */
+        .bottom-nav {
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 0 20px;
+            border-top: 1px solid #f0f0f0;
+            background: white;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: #999;
+            font-size: 12px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .nav-item:hover {
+            color: #CC0001;
+        }
+
+        .nav-item svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Pulse animatie voor voice button */
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(204, 0, 1, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(204, 0, 1, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(204, 0, 1, 0); }
+        }
+
+        .voice-button.recording {
+            animation: pulse 1.5s infinite;
+            background: #8B0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-container">
+        <!-- Header -->
+        <div class="app-header">
+            <div class="app-title">Kwaaijongens</div>
+            <button class="menu-button" onclick="alert('Menu geopend!')">
+                <div class="menu-dots">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            </button>
+        </div>
+
+        <!-- Content -->
+        <div class="content-area">
+            <div class="section-title">Projectinformatie</div>
+            <h1 class="main-title">Vertel ons over je project!</h1>
+            
+            <div class="info-card">
+                <p class="intro-text">
+                    <strong>Type of spreek in wat in je opkomt. Het hoeft niet perfect te zijn! Probeer dit mee te nemen in je verhaal:</strong>
+                </p>
+                <ul class="questions-list">
+                    <li class="question-item">Welk probleem hebben jullie verholpen of welke wens had de klant?</li>
+                    <li class="question-item">Welke werkzaamheden zijn uitgevoerd en waar?</li>
+                    <li class="question-item">Waren er bijzonderheden zoals uitzonderlijke eisen of werkomstandigheden?</li>
+                    <li class="question-item">Wat was het eindresultaat?</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Input Section -->
+        <div class="input-section">
+            <div class="input-container">
+                <input type="text" class="input-field" placeholder="Type of spreek in" id="projectInput">
+                <button class="voice-button" onclick="toggleRecording()">
+                    <svg fill="white" viewBox="0 0 24 24" width="24" height="24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <button class="action-btn" onclick="openCamera()">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 12m-3.2 0a3.2 3.2 0 1 0 6.4 0a3.2 3.2 0 1 0 -6.4 0"/>
+                    <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                </svg>
+                <span class="action-label">Camera</span>
+            </button>
+            <button class="action-btn" onclick="openGallery()">
+                <svg viewBox="0 0 24 24">
+                    <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                </svg>
+                <span class="action-label">Foto/Video</span>
+            </button>
+            <button class="action-btn" onclick="openFilePicker()">
+                <svg viewBox="0 0 24 24">
+                    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                </svg>
+                <span class="action-label">Bestand</span>
+            </button>
+            <div class="file-info-text">
+                Max. 25 MB. Denk aan auteurs- en portretrechten.
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button class="submit-button" onclick="submitProject()">Klaar? Verzenden maar!</button>
+
+        <!-- Bottom Navigation -->
+        <div class="bottom-nav">
+            <div class="nav-item" onclick="showPreviousProjects()">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <span>Eerder ingezonden</span>
+            </div>
+            <div class="nav-item" onclick="showInspiration()">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                <span>Inspiratie</span>
+            </div>
+            <div class="nav-item" onclick="showHelp()">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <span>Hulp</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRecording = false;
+
+        function toggleRecording() {
+            const button = document.querySelector('.voice-button');
+            isRecording = !isRecording;
+            
+            if (isRecording) {
+                button.classList.add('recording');
+                alert('Opname gestart!');
+            } else {
+                button.classList.remove('recording');
+                alert('Opname gestopt!');
+            }
+        }
+
+        function openCamera() {
+            alert('Camera wordt geopend...');
+        }
+
+        function openGallery() {
+            alert('Galerij wordt geopend...');
+        }
+
+        function openFilePicker() {
+            alert('Bestandskiezer wordt geopend...');
+        }
+
+        function submitProject() {
+            const input = document.getElementById('projectInput').value;
+            if (input.trim()) {
+                alert('Project wordt verzonden: ' + input);
+            } else {
+                alert('Voer eerst projectinformatie in!');
+            }
+        }
+
+        function showPreviousProjects() {
+            alert('Eerder ingezonden projecten...');
+        }
+
+        function showInspiration() {
+            alert('Inspiratie sectie...');
+        }
+
+        function showHelp() {
+            alert('Help sectie...');
+        }
+    </script>
+</body>
+</html>
