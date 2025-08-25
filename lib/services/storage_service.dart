@@ -213,4 +213,48 @@ class StorageService {
       return false;
     }
   }
+
+  // Storage monitoring for optimization
+  static Future<Map<String, dynamic>> getStorageStats() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+      
+      int sessionCount = 0;
+      int messageKeys = 0;
+      int totalMessageSize = 0;
+      int sessionDataSize = 0;
+      
+      for (String key in keys) {
+        if (key.startsWith('messages_')) {
+          messageKeys++;
+          final messagesJson = prefs.getString(key) ?? '';
+          totalMessageSize += messagesJson.length;
+        } else if (key.startsWith(_sessionDataKey)) {
+          sessionCount++;
+          final sessionJson = prefs.getString(key) ?? '';
+          sessionDataSize += sessionJson.length;
+        }
+      }
+      
+      return {
+        'sessionCount': sessionCount,
+        'messageSessionCount': messageKeys,
+        'totalMessageSizeBytes': totalMessageSize,
+        'sessionDataSizeBytes': sessionDataSize,
+        'totalSizeBytes': totalMessageSize + sessionDataSize,
+        'averageMessageSizePerSession': messageKeys > 0 ? totalMessageSize / messageKeys : 0,
+      };
+    } catch (e) {
+      print('Error getting storage stats: $e');
+      return {
+        'sessionCount': 0,
+        'messageSessionCount': 0,
+        'totalMessageSizeBytes': 0,
+        'sessionDataSizeBytes': 0,
+        'totalSizeBytes': 0,
+        'averageMessageSizePerSession': 0,
+      };
+    }
+  }
 }

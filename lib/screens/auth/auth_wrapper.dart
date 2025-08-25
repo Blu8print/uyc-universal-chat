@@ -3,7 +3,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
-import '../../screens/chat_screen.dart';
+import '../start_screen.dart';
 import '../../widgets/message_dialog.dart';
 import 'phone_input_screen.dart';
 
@@ -148,9 +148,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    // Show chat if authenticated, otherwise show phone input
+    // Show start screen if authenticated, otherwise show phone input
     if (_isAuthenticated) {
-      return const ChatScreen();
+      return const StartScreen();
     } else {
       return const PhoneInputScreen();
     }

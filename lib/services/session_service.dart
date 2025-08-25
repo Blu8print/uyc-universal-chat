@@ -141,6 +141,8 @@ class SessionService {
   static Future<void> loadSessionListFromCache() async {
     try {
       _sessionList = await StorageService.loadSessionList();
+      // Sort cached sessions by date (most recent first)
+      _sortSessionsByDate(_sessionList);
     } catch (e) {
       print('Error loading session list from cache: $e');
       _sessionList = [];
@@ -195,6 +197,12 @@ class SessionService {
           // Remove from local list
           _sessionList.removeWhere((session) => session.sessionId == sessionId);
           await StorageService.saveSessionList(_sessionList);
+          
+          // Clear all chat messages for this session from device
+          await StorageService.clearMessages(sessionId);
+          
+          // Clear session metadata from device
+          await StorageService.clearSessionData(sessionId);
           
           // If deleting current session, clear it
           if (_currentSessionId == sessionId) {
@@ -252,6 +260,22 @@ class SessionService {
       if (success) {
         print('Session list synced successfully');
       }
+    });
+  }
+
+  // Helper method to sort sessions by date (most recent first)
+  static void _sortSessionsByDate(List<SessionData> sessions) {
+    sessions.sort((a, b) {
+      final aDate = DateTime.tryParse(a.lastActivity ?? a.createdAt ?? '');
+      final bDate = DateTime.tryParse(b.lastActivity ?? b.createdAt ?? '');
+      
+      // Handle null dates
+      if (aDate == null && bDate == null) return 0;
+      if (aDate == null) return 1; // Put null dates at the end
+      if (bDate == null) return -1; // Put null dates at the end
+      
+      // Sort in descending order (newest first)
+      return bDate.compareTo(aDate);
     });
   }
 }

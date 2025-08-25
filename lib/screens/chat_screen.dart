@@ -47,7 +47,9 @@ class MyApp extends StatelessWidget {
 }
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final String? actionContext;
+  
+  const ChatScreen({super.key, this.actionContext});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -77,11 +79,42 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _initializeApp();
   }
+  
+  Future<void> _handleActionContext() async {
+    if (widget.actionContext != null) {
+      String contextMessage = '';
+      switch (widget.actionContext) {
+        case 'project':
+          contextMessage = 'Ik wil een project doorgeven. ';
+          break;
+        case 'knowledge':
+          contextMessage = 'Ik wil mijn vakkennis delen voor een blog. ';
+          break;
+        case 'social':
+          contextMessage = 'Ik wil content maken voor social media. ';
+          break;
+      }
+      
+      if (contextMessage.isNotEmpty) {
+        // Add context message as first user message
+        final contextChatMessage = ChatMessage(
+          text: contextMessage,
+          isCustomer: true,
+          timestamp: DateTime.now(),
+        );
+        
+        await _addMessage(contextChatMessage);
+      }
+    }
+  }
 
   Future<void> _initializeApp() async {
     await _initializeServices();
     await _initializeWelcomeMessage();
     _requestInitialPermissions();
+    
+    // Handle action context after welcome message
+    await _handleActionContext();
   }
 
   Future<void> _initializeServices() async {

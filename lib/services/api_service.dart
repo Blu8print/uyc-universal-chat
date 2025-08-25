@@ -240,17 +240,43 @@ class ApiService {
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
         
-        if (responseData['success'] == true) {
+        // Handle direct array response from server
+        if (responseData is List) {
+          final List<dynamic> sessionsData = responseData;
+          final sessions = sessionsData.map((sessionJson) => SessionData(
+            sessionId: sessionJson['session_id'] ?? '',
+            title: sessionJson['session_title'] ?? 'Untitled Session',
+            description: sessionJson['session_description'] ?? '',
+            thumbnail: sessionJson['session_thumbnail'],
+            lastActivity: sessionJson['last_modified'] ?? sessionJson['created_at'],
+            messageCount: 0, // Not provided by server
+            createdAt: sessionJson['created_at'],
+          )).toList();
+          
+          // Sort sessions by lastActivity (most recent first)
+          _sortSessionsByDate(sessions);
+          
+          return SessionListResponse(
+            success: true,
+            message: 'Sessions retrieved successfully',
+            sessions: sessions,
+          );
+        }
+        // Handle wrapped response format (fallback)
+        else if (responseData is Map && responseData['success'] == true) {
           final List<dynamic> sessionsData = responseData['data'] ?? [];
           final sessions = sessionsData.map((sessionJson) => SessionData(
-            sessionId: sessionJson['sessionId'] ?? '',
-            title: sessionJson['title'] ?? 'Untitled Session',
-            description: sessionJson['description'] ?? '',
-            thumbnail: sessionJson['thumbnail'],
-            lastActivity: sessionJson['lastActivity'],
+            sessionId: sessionJson['session_id'] ?? sessionJson['sessionId'] ?? '',
+            title: sessionJson['session_title'] ?? sessionJson['title'] ?? 'Untitled Session',
+            description: sessionJson['session_description'] ?? sessionJson['description'] ?? '',
+            thumbnail: sessionJson['session_thumbnail'] ?? sessionJson['thumbnail'],
+            lastActivity: sessionJson['last_modified'] ?? sessionJson['lastActivity'] ?? sessionJson['created_at'],
             messageCount: sessionJson['messageCount'] ?? 0,
-            createdAt: sessionJson['createdAt'],
+            createdAt: sessionJson['created_at'] ?? sessionJson['createdAt'],
           )).toList();
+          
+          // Sort sessions by lastActivity (most recent first)
+          _sortSessionsByDate(sessions);
           
           return SessionListResponse(
             success: true,
@@ -260,7 +286,7 @@ class ApiService {
         } else {
           return SessionListResponse(
             success: false,
-            message: responseData['message'] ?? 'Failed to retrieve sessions',
+            message: responseData is Map ? (responseData['message'] ?? 'Failed to retrieve sessions') : 'Invalid response format',
             sessions: [],
           );
         }
@@ -599,5 +625,21 @@ class SessionListResponse {
     required this.success,
     required this.message,
     required this.sessions,
+  });
+}
+
+// Helper method to sort sessions by date (most recent first)
+void _sortSessionsByDate(List<SessionData> sessions) {
+  sessions.sort((a, b) {
+    final aDate = DateTime.tryParse(a.lastActivity ?? a.createdAt ?? '');
+    final bDate = DateTime.tryParse(b.lastActivity ?? b.createdAt ?? '');
+    
+    // Handle null dates
+    if (aDate == null && bDate == null) return 0;
+    if (aDate == null) return 1; // Put null dates at the end
+    if (bDate == null) return -1; // Put null dates at the end
+    
+    // Sort in descending order (newest first)
+    return bDate.compareTo(aDate);
   });
 }
