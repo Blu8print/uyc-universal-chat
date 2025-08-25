@@ -7,6 +7,10 @@ class ApiService {
   static const String _verifySmsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/verify-sms';
   static const String _versionCheckUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/version-check';
   static const String _fcmTokenUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/fcm-token';
+  static const String _sessionsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/sessions';
+  
+  // Session management credentials
+  static const String _sessionAuth = 'kj-app:ar6e!GyXu';
   
   // Send SMS verification code
   static Future<ApiResponse> sendSmsCode(String phoneNumber, String name, String email) async {
@@ -146,6 +150,318 @@ class ApiService {
     }
   }
 
+  // Create session on backend
+  static Future<SessionResponse> createSession({
+    required String sessionId,
+    required String phoneNumber,
+    required String name,
+    required String companyName,
+  }) async {
+    try {
+      final authBytes = utf8.encode(_sessionAuth);
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+      
+      final response = await http.post(
+        Uri.parse(_sessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': authHeader,
+        },
+        body: jsonEncode({
+          'method': 'create',
+          'sessionId': sessionId,
+          'phoneNumber': phoneNumber,
+          'name': name,
+          'companyName': companyName,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        
+        if (responseData['success'] == true) {
+          final data = responseData['data'] ?? {};
+          return SessionResponse(
+            success: true,
+            message: responseData['message'] ?? 'Session created successfully',
+            sessionData: SessionData(
+              sessionId: sessionId,
+              title: data['title'] ?? 'New Chat',
+              description: data['description'] ?? '',
+              thumbnail: data['thumbnail'],
+            ),
+          );
+        } else {
+          return SessionResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to create session',
+          );
+        }
+      } else {
+        return SessionResponse(
+          success: false,
+          message: 'Failed to create session: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      return SessionResponse(
+        success: false,
+        message: 'Network error creating session: $e',
+      );
+    }
+  }
+
+  // List user sessions
+  static Future<SessionListResponse> listSessions({
+    required String phoneNumber,
+    required String name,
+    required String companyName,
+  }) async {
+    try {
+      final authBytes = utf8.encode(_sessionAuth);
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+      
+      final response = await http.post(
+        Uri.parse(_sessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': authHeader,
+        },
+        body: jsonEncode({
+          'method': 'list',
+          'phoneNumber': phoneNumber,
+          'name': name,
+          'companyName': companyName,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        
+        if (responseData['success'] == true) {
+          final List<dynamic> sessionsData = responseData['data'] ?? [];
+          final sessions = sessionsData.map((sessionJson) => SessionData(
+            sessionId: sessionJson['sessionId'] ?? '',
+            title: sessionJson['title'] ?? 'Untitled Session',
+            description: sessionJson['description'] ?? '',
+            thumbnail: sessionJson['thumbnail'],
+            lastActivity: sessionJson['lastActivity'],
+            messageCount: sessionJson['messageCount'] ?? 0,
+            createdAt: sessionJson['createdAt'],
+          )).toList();
+          
+          return SessionListResponse(
+            success: true,
+            message: 'Sessions retrieved successfully',
+            sessions: sessions,
+          );
+        } else {
+          return SessionListResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to retrieve sessions',
+            sessions: [],
+          );
+        }
+      } else {
+        return SessionListResponse(
+          success: false,
+          message: 'Failed to retrieve sessions: ${response.statusCode}',
+          sessions: [],
+        );
+      }
+    } catch (e) {
+      return SessionListResponse(
+        success: false,
+        message: 'Network error retrieving sessions: $e',
+        sessions: [],
+      );
+    }
+  }
+
+  // Update session metadata
+  static Future<SessionResponse> updateSession({
+    required String sessionId,
+    required String phoneNumber,
+    required String name,
+    required String companyName,
+    String? title,
+    String? description,
+  }) async {
+    try {
+      final authBytes = utf8.encode(_sessionAuth);
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+      
+      final requestBody = {
+        'method': 'update',
+        'sessionId': sessionId,
+        'phoneNumber': phoneNumber,
+        'name': name,
+        'companyName': companyName,
+      };
+      
+      if (title != null) requestBody['title'] = title;
+      if (description != null) requestBody['description'] = description;
+      
+      final response = await http.post(
+        Uri.parse(_sessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': authHeader,
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        
+        if (responseData['success'] == true) {
+          final data = responseData['data'] ?? {};
+          return SessionResponse(
+            success: true,
+            message: responseData['message'] ?? 'Session updated successfully',
+            sessionData: SessionData(
+              sessionId: sessionId,
+              title: data['title'] ?? title ?? 'Updated Session',
+              description: data['description'] ?? description ?? '',
+              thumbnail: data['thumbnail'],
+            ),
+          );
+        } else {
+          return SessionResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to update session',
+          );
+        }
+      } else {
+        return SessionResponse(
+          success: false,
+          message: 'Failed to update session: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      return SessionResponse(
+        success: false,
+        message: 'Network error updating session: $e',
+      );
+    }
+  }
+
+  // Delete session
+  static Future<ApiResponse> deleteSession({
+    required String sessionId,
+    required String phoneNumber,
+    required String name,
+    required String companyName,
+  }) async {
+    try {
+      final authBytes = utf8.encode(_sessionAuth);
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+      
+      final response = await http.post(
+        Uri.parse(_sessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': authHeader,
+        },
+        body: jsonEncode({
+          'method': 'delete',
+          'sessionId': sessionId,
+          'phoneNumber': phoneNumber,
+          'name': name,
+          'companyName': companyName,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        
+        return ApiResponse(
+          success: responseData['success'] ?? true,
+          message: responseData['message'] ?? 'Session deleted successfully',
+        );
+      } else {
+        return ApiResponse(
+          success: false,
+          message: 'Failed to delete session: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      return ApiResponse(
+        success: false,
+        message: 'Network error deleting session: $e',
+      );
+    }
+  }
+
+  // Get session details
+  static Future<SessionResponse> getSessionDetails({
+    required String sessionId,
+    required String phoneNumber,
+    required String name,
+    required String companyName,
+  }) async {
+    try {
+      final authBytes = utf8.encode(_sessionAuth);
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+      
+      final response = await http.post(
+        Uri.parse(_sessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': authHeader,
+        },
+        body: jsonEncode({
+          'method': 'get',
+          'sessionId': sessionId,
+          'phoneNumber': phoneNumber,
+          'name': name,
+          'companyName': companyName,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        
+        if (responseData['success'] == true) {
+          final data = responseData['data'] ?? {};
+          return SessionResponse(
+            success: true,
+            message: 'Session details retrieved successfully',
+            sessionData: SessionData(
+              sessionId: sessionId,
+              title: data['title'] ?? 'Session',
+              description: data['description'] ?? '',
+              thumbnail: data['thumbnail'],
+              lastActivity: data['lastActivity'],
+              messageCount: data['messageCount'] ?? 0,
+              createdAt: data['createdAt'],
+            ),
+          );
+        } else {
+          return SessionResponse(
+            success: false,
+            message: responseData['message'] ?? 'Failed to get session details',
+          );
+        }
+      } else {
+        return SessionResponse(
+          success: false,
+          message: 'Failed to get session details: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      return SessionResponse(
+        success: false,
+        message: 'Network error getting session details: $e',
+      );
+    }
+  }
+
   // Check app version and user status
   static Future<VersionCheckResponse> checkVersion(String version, String phoneNumber) async {
     try {
@@ -212,5 +528,76 @@ class VersionCheckResponse {
     this.reset = false,
     this.message = '',
     this.appVersion = '',
+  });
+}
+
+// Session data model
+class SessionData {
+  final String sessionId;
+  final String title;
+  final String description;
+  final String? thumbnail;
+  final String? lastActivity;
+  final int messageCount;
+  final String? createdAt;
+
+  SessionData({
+    required this.sessionId,
+    required this.title,
+    required this.description,
+    this.thumbnail,
+    this.lastActivity,
+    this.messageCount = 0,
+    this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'sessionId': sessionId,
+      'title': title,
+      'description': description,
+      'thumbnail': thumbnail,
+      'lastActivity': lastActivity,
+      'messageCount': messageCount,
+      'createdAt': createdAt,
+    };
+  }
+
+  factory SessionData.fromJson(Map<String, dynamic> json) {
+    return SessionData(
+      sessionId: json['sessionId'] ?? '',
+      title: json['title'] ?? 'Untitled Session',
+      description: json['description'] ?? '',
+      thumbnail: json['thumbnail'],
+      lastActivity: json['lastActivity'],
+      messageCount: json['messageCount'] ?? 0,
+      createdAt: json['createdAt'],
+    );
+  }
+}
+
+// Session response class
+class SessionResponse {
+  final bool success;
+  final String message;
+  final SessionData? sessionData;
+
+  SessionResponse({
+    required this.success,
+    required this.message,
+    this.sessionData,
+  });
+}
+
+// Session list response class
+class SessionListResponse {
+  final bool success;
+  final String message;
+  final List<SessionData> sessions;
+
+  SessionListResponse({
+    required this.success,
+    required this.message,
+    required this.sessions,
   });
 }

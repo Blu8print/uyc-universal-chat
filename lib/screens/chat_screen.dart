@@ -85,7 +85,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _initializeServices() async {
-    await SessionService.initialize();
+    await SessionService.initializeWithSync();
     await _initializeFirebaseMessaging();
   }
 
@@ -171,6 +171,11 @@ class _ChatScreenState extends State<ChatScreen> {
     if (sessionId != null) {
       final messagesJson = _messages.map((msg) => msg.toJson()).toList();
       await StorageService.saveMessages(sessionId, messagesJson);
+      
+      // Update session metadata after sending messages
+      if (_messages.isNotEmpty) {
+        await SessionService.updateCurrentSession();
+      }
     }
   }
 
