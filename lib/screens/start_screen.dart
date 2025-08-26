@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import '../services/api_service.dart';
@@ -159,6 +160,9 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _navigateToAction(String actionType) async {
+    // Always start a new session for action buttons
+    await SessionService.resetSession();
+    
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ChatScreen(actionContext: actionType),
@@ -239,7 +243,7 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
       decoration: const BoxDecoration(
         border: Border(
           bottom: BorderSide(color: Color(0xFFF0F0F0), width: 1),
@@ -248,21 +252,24 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            'Kwaaijongens',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFFCC0001),
-            ),
+          SvgPicture.asset(
+            'logo.svg',
+            height: 40,
+            fit: BoxFit.contain,
+            allowDrawingOutsideViewBox: true,
           ),
           PopupMenuButton<String>(
             onSelected: _handleMenuSelection,
-            icon: const Text(
-              '⋮',
-              style: TextStyle(
-                fontSize: 20,
-                color: Colors.grey,
+            icon: Container(
+              padding: const EdgeInsets.all(8.0),
+              child: const Text(
+                '⋮',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF374151),
+                  height: 1.0,
+                ),
               ),
             ),
             offset: const Offset(0, 40),

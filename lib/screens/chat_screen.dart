@@ -15,6 +15,7 @@ import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
 import '../widgets/document_message_widget.dart';
 import 'package:image_picker/image_picker.dart';
+import 'start_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -66,11 +67,17 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoading = false;
   bool _isRecording = false;
   bool _isEmailSending = false;
+  bool _isDeletingSession = false;
   Duration _recordingDuration = Duration.zero;
+  bool _showSendToTeamBanner = false;
+  bool _bannerAvailable = false;
+  Timer? _bannerTimer;
+  String _chatTitle = 'Chat';
   
   final String _n8nChatUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
   final String _n8nImageUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/e54fbfea-e46e-4b21-9a05-48d75d568ae3';
   final String _n8nEmailUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/69ffb2fc-518b-42a9-a490-a308c2e9a454';
+  final String _n8nSessionsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/sessions';
   
   final List<ChatMessage> _messages = [];
 
@@ -115,6 +122,11 @@ class _ChatScreenState extends State<ChatScreen> {
     
     // Handle action context after welcome message
     await _handleActionContext();
+    
+    // Fetch chat title after everything is initialized
+    if (mounted) {
+      _fetchChatTitle();
+    }
   }
 
   Future<void> _initializeServices() async {
@@ -171,6 +183,7 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() {
           _messages.addAll(messages);
         });
+        _scrollToBottom();
         return;
       }
     }
@@ -251,6 +264,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.dispose();
     _audioService.dispose();
     _recordingTimer?.cancel();
+    _bannerTimer?.cancel();
     super.dispose();
   }
 
@@ -267,6 +281,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendMessage() async {
+    // Disable banner availability when user sends a message
+    setState(() {
+      _bannerAvailable = false;
+      _showSendToTeamBanner = false;
+    });
+    
     if (_messageController.text.trim().isNotEmpty && !_isLoading) {
       final userMessage = _messageController.text.trim();
       
@@ -320,6 +340,12 @@ class _ChatScreenState extends State<ChatScreen> {
           isCustomer: false,
           timestamp: DateTime.now(),
         ));
+        
+        // Show send to team banner after AI response
+        _displaySendToTeamBanner();
+        
+        // Fetch updated chat title
+        _fetchChatTitle();
       } else {
         _addErrorMessage('Server error: ${response.statusCode}');
       }
@@ -339,6 +365,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _startRecording() async {
+    // Hide banner temporarily during recording
+    setState(() {
+      _showSendToTeamBanner = false;
+    });
+    
     print('DEBUG: Starting recording...');
     final hasPermission = await _audioService.requestPermission();
     print('DEBUG: Recording permission granted: $hasPermission');
@@ -391,10 +422,21 @@ class _ChatScreenState extends State<ChatScreen> {
     
     if (audioFile != null) {
       await _sendAudioMessage(audioFile);
+    } else {
+      // Recording cancelled - show banner again if available and text field empty
+      setState(() {
+        _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+      });
     }
   }
 
   Future<void> _sendAudioMessage(File audioFile) async {
+    // Disable banner availability when sending audio
+    setState(() {
+      _bannerAvailable = false;
+      _showSendToTeamBanner = false;
+    });
+    
     // Create new audio message with pending status
     final newMessage = ChatMessage(
       text: '🎤 Audio bericht (${_formatDuration(_recordingDuration)})',
@@ -569,6 +611,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
+    // Hide banner temporarily during image picking
+    setState(() {
+      _showSendToTeamBanner = false;
+    });
+    
     try {
       // Request permissions
       if (source == ImageSource.camera) {
@@ -607,8 +654,18 @@ class _ChatScreenState extends State<ChatScreen> {
       if (image != null) {
         final imageFile = File(image.path);
         await _sendImageMessage(imageFile);
+      } else {
+        // Image picking cancelled - show banner again if available and text field empty
+        setState(() {
+          _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+        });
       }
     } catch (e) {
+      // Error occurred - show banner again if available and text field empty
+      setState(() {
+        _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+      });
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -684,6 +741,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendImageMessage(File imageFile) async {
+    // Disable banner availability when sending image
+    setState(() {
+      _bannerAvailable = false;
+      _showSendToTeamBanner = false;
+    });
+    
     // Create new image message with pending status
     final newMessage = ChatMessage(
       text: '📷 Afbeelding',
@@ -703,12 +766,27 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickDocument() async {
+    // Hide banner temporarily during document picking
+    setState(() {
+      _showSendToTeamBanner = false;
+    });
+    
     try {
       final documentFile = await AttachmentService.pickDocument();
       if (documentFile != null) {
         await _sendDocumentMessage(documentFile);
+      } else {
+        // Document picking cancelled - show banner again if available and text field empty
+        setState(() {
+          _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+        });
       }
     } catch (e) {
+      // Error occurred - show banner again if available and text field empty
+      setState(() {
+        _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+      });
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -720,6 +798,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendDocumentMessage(File documentFile) async {
+    // Disable banner availability when sending document
+    setState(() {
+      _bannerAvailable = false;
+      _showSendToTeamBanner = false;
+    });
+    
     final fileInfo = AttachmentService.getFileInfo(documentFile);
     
     // Create new document message with pending status
@@ -745,6 +829,17 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _isTyping = text.trim().isNotEmpty;
     });
+    
+    // Show/hide banner based on text field state
+    if (text.trim().isEmpty && _bannerAvailable) {
+      setState(() {
+        _showSendToTeamBanner = true;
+      });
+    } else {
+      setState(() {
+        _showSendToTeamBanner = false;
+      });
+    }
   }
 
   // Get all pending messages in chronological order
@@ -855,6 +950,12 @@ class _ChatScreenState extends State<ChatScreen> {
           status: MessageStatus.sent,
         ));
       });
+      
+      // Show send to team banner after AI response
+      _displaySendToTeamBanner();
+      
+      // Fetch updated chat title
+      _fetchChatTitle();
     } else {
       throw Exception('Failed to send text messages: ${response.statusCode}');
     }
@@ -909,6 +1010,12 @@ class _ChatScreenState extends State<ChatScreen> {
           status: MessageStatus.sent,
         ));
       });
+      
+      // Show send to team banner after AI response
+      _displaySendToTeamBanner();
+      
+      // Fetch updated chat title
+      _fetchChatTitle();
     } else {
       throw Exception('Failed to send image: ${response.statusCode}');
     }
@@ -952,6 +1059,12 @@ class _ChatScreenState extends State<ChatScreen> {
           status: MessageStatus.sent,
         ));
       });
+      
+      // Show send to team banner after AI response
+      _displaySendToTeamBanner();
+      
+      // Fetch updated chat title
+      _fetchChatTitle();
     } else {
       throw Exception('Failed to send audio: ${response.statusCode}');
     }
@@ -999,6 +1112,12 @@ class _ChatScreenState extends State<ChatScreen> {
           status: MessageStatus.sent,
         ));
       });
+      
+      // Show send to team banner after AI response
+      _displaySendToTeamBanner();
+      
+      // Fetch updated chat title
+      _fetchChatTitle();
     } else {
       throw Exception('Failed to send document: ${response.statusCode}');
     }
@@ -1109,6 +1228,9 @@ class _ChatScreenState extends State<ChatScreen> {
       case 'forward_conversation':
         _sendEmail();
         break;
+      case 'clear_conversation':
+        _clearConversation();
+        break;
       case 'call_kwaaijongens':
         _callKwaaijongens();
         break;
@@ -1121,6 +1243,184 @@ class _ChatScreenState extends State<ChatScreen> {
       case 'about_app':
         _showAboutDialog();
         break;
+    }
+  }
+
+  Future<void> _clearConversation() async {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Chat wissen'),
+          content: const Text('Weet je zeker dat je alle berichten wilt verwijderen?'),
+          actions: [
+            TextButton(
+              onPressed: _isDeletingSession ? null : () => Navigator.pop(context),
+              child: const Text('Annuleer'),
+            ),
+            TextButton(
+              onPressed: _isDeletingSession ? null : () async {
+                final currentSessionId = SessionService.currentSessionId;
+                if (currentSessionId == null) {
+                  Navigator.pop(context);
+                  return;
+                }
+
+                setDialogState(() {
+                  _isDeletingSession = true;
+                });
+
+                // Call webhook to delete session
+                final success = await _deleteSessionOnWebhook(currentSessionId);
+
+                if (success) {
+                  // Clear stored messages for this session
+                  await StorageService.clearMessages(currentSessionId);
+                  
+                  // Clear current session data
+                  await SessionService.clearSession();
+                  
+                  // Close dialog and navigate to StartScreen
+                  if (mounted) {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const StartScreen()),
+                    );
+                  }
+                } else {
+                  // Show error message
+                  setDialogState(() {
+                    _isDeletingSession = false;
+                  });
+                  
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Kon sessie niet verwijderen. Probeer het opnieuw.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: _isDeletingSession
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Wissen'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _fetchChatTitle() async {
+    try {
+      final clientData = AuthService.getClientData();
+      final requestBody = {
+        'method': 'get',
+        'sessionId': SessionService.currentSessionId ?? 'no-session',
+        'phoneNumber': clientData?['phone'] ?? '',
+        'name': clientData?['name'] ?? '',
+        'company': clientData?['companyName'] ?? '',
+      };
+      
+      print('DEBUG: Fetching chat title with: ${jsonEncode(requestBody)}');
+      
+      // Use same authentication as session list API
+      final authBytes = utf8.encode('kj-app:ar6e!GyXu');
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+      
+      final response = await http.post(
+        Uri.parse(_n8nSessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': authHeader,
+          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 10));
+
+      print('DEBUG: Chat title API response: ${response.statusCode} - ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> session = jsonDecode(response.body);
+        final sessionTitle = session['session_title']?.toString();
+        print('DEBUG: Extracted session title: $sessionTitle');
+        print('DEBUG: Current _chatTitle value: $_chatTitle');
+        print('DEBUG: Widget mounted: $mounted');
+        
+        if (sessionTitle != null && sessionTitle.isNotEmpty) {
+          print('DEBUG: Updating chat title to: $sessionTitle');
+          if (mounted) {
+            setState(() {
+              _chatTitle = sessionTitle;
+            });
+            print('DEBUG: setState completed, new _chatTitle: $_chatTitle');
+          } else {
+            print('DEBUG: Widget not mounted, skipping setState');
+          }
+        } else {
+          print('DEBUG: Session title is null or empty');
+        }
+      }
+    } catch (e) {
+      // Silently handle errors - keep existing title
+      print('Error fetching chat title: $e');
+    }
+  }
+
+  Future<bool> _deleteSessionOnWebhook(String sessionId) async {
+    try {
+      final clientData = AuthService.getClientData();
+      final requestBody = {
+        'method': 'delete',
+        'sessionId': sessionId,
+        'phoneNumber': clientData?['phone'] ?? '',
+        'name': clientData?['name'] ?? '',
+        'companyName': clientData?['companyName'] ?? '',
+      };
+      
+      print('DEBUG: Deleting session with: ${jsonEncode(requestBody)}');
+      
+      // Use same authentication as other session APIs
+      final authBytes = utf8.encode('kj-app:ar6e!GyXu');
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+      
+      final response = await http.post(
+        Uri.parse(_n8nSessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': authHeader,
+          'X-Session-ID': sessionId,
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 10));
+
+      print('DEBUG: Delete session API response: ${response.statusCode} - ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (responseData['response'] == 'success') {
+          print('DEBUG: Session deleted successfully');
+          return true;
+        } else {
+          print('DEBUG: Unexpected response: ${responseData}');
+          return false;
+        }
+      } else {
+        print('DEBUG: Delete session failed with status: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error deleting session: $e');
+      return false;
     }
   }
 
@@ -1312,177 +1612,258 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Kwaaijongens APP',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-          ),
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFF0F0F0), width: 1),
         ),
-        centerTitle: true,
-        leading: IconButton(
-          onPressed: () {
-            // Clear chat
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Chat wissen'),
-                content: const Text('Weet je zeker dat je alle berichten wilt verwijderen?'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Annuleer'),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const StartScreen()),
+              );
+            },
+            icon: const Icon(
+              Icons.arrow_back_ios,
+              color: Color(0xFF374151),
+              size: 24,
+            ),
+            padding: const EdgeInsets.all(8.0),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                _chatTitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF374151),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          PopupMenuButton<String>(
+                onSelected: _handleMenuSelection,
+                icon: Container(
+                  padding: const EdgeInsets.all(8.0),
+                  child: const Text(
+                    '⋮',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF374151),
+                      height: 1.0,
+                    ),
                   ),
-                  TextButton(
-                    onPressed: () async {
-                      final oldSessionId = SessionService.currentSessionId;
-                      await SessionService.resetSession();
-                      
-                      // Clear stored messages for old session
-                      if (oldSessionId != null) {
-                        await StorageService.clearMessages(oldSessionId);
-                      }
-                      
-                      // Clear current messages and add welcome message
-                      setState(() {
-                        _messages.clear();
-                      });
-                      
-                      await _addMessage(ChatMessage(
-                        text: "Hallo! Ik ben je AI-assistent van kwaaijongens APP. Ik help je graag met je blog ideeën en content creatie. Waar kan ik je mee helpen?",
-                        isCustomer: false,
-                        timestamp: DateTime.now(),
-                      ));
-                      
-                      if (mounted) Navigator.pop(context);
-                    },
-                    child: const Text('Wissen'),
+                ),
+                offset: const Offset(0, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                color: Colors.white,
+                elevation: 8,
+                itemBuilder: (BuildContext context) => [
+                  PopupMenuItem<String>(
+                    value: 'forward_conversation',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.mail, color: Colors.grey, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Gesprek doorsturen',
+                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'clear_conversation',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.grey, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Gesprek wissen',
+                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'help_support',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.help_center, color: Colors.grey, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Helpdesk (FAQ\'s)',
+                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem<String>(
+                    value: 'call_kwaaijongens',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.phone, color: Colors.grey, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Bel Kwaaijongens',
+                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'privacy_policy',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.shield, color: Colors.grey, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Privacyverklaring',
+                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem<String>(
+                    value: 'about_app',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info, color: Colors.grey, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Over deze app',
+                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
-            );
-          },
-          icon: const Icon(Icons.refresh),
-        ),
-        actions: [
-          IconButton(
-            onPressed: _isEmailSending ? null : _sendEmail,
-            icon: _isEmailSending 
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Icon(Icons.email),
-          ),
-          Transform.translate(
-            offset: const Offset(-8, 0),
-            child: PopupMenuButton<String>(
-            onSelected: _handleMenuSelection,
-            icon: const Icon(Icons.more_vert),
-            offset: const Offset(0, 40),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSendToTeamBanner() {
+    if (!_showSendToTeamBanner) return const SizedBox.shrink();
+    
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
+              color: Color(0xFFCC0001),
+              shape: BoxShape.circle,
             ),
-            color: Colors.white,
-            elevation: 8,
-            itemBuilder: (BuildContext context) => [
-              PopupMenuItem<String>(
-                value: 'forward_conversation',
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.mail, color: Colors.grey, size: 20),
-                      SizedBox(width: 12),
-                      Text(
-                        'Gesprek doorsturen',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'call_kwaaijongens',
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.phone, color: Colors.grey, size: 20),
-                      SizedBox(width: 12),
-                      Text(
-                        'Bel Kwaaijongens',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem<String>(
-                value: 'privacy_policy',
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.shield, color: Colors.grey, size: 20),
-                      SizedBox(width: 12),
-                      Text(
-                        'Privacyverklaring',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'help_support',
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.help_center, color: Colors.grey, size: 20),
-                      SizedBox(width: 12),
-                      Text(
-                        'Help & Support',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem<String>(
-                value: 'about_app',
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.info, color: Colors.grey, size: 20),
-                      SizedBox(width: 12),
-                      Text(
-                        'Over deze app',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+            child: const Icon(
+              Icons.check,
+              color: Colors.white,
+              size: 12,
+            ),
           ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Alles verteld wat we moeten weten? Mooi! Stuur maar door!',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF374151),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _showSendToTeamBanner = false;
+              });
+              _bannerTimer?.cancel();
+              _sendEmail();
+            },
+            style: TextButton.styleFrom(
+              backgroundColor: const Color(0xFFCC0001),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            child: const Text(
+              'Versturen',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
           ),
         ],
       ),
-      body: Column(
+    );
+  }
+
+  void _displaySendToTeamBanner() {
+    // Cancel any existing timer
+    _bannerTimer?.cancel();
+    
+    // Make banner available and show if text field is empty
+    setState(() {
+      _bannerAvailable = true;
+      _showSendToTeamBanner = _messageController.text.trim().isEmpty;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
         children: [
+          // Custom Header
+          _buildHeader(),
+          
           // Chat messages
           Expanded(
             child: ListView.builder(
@@ -1497,6 +1878,10 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
+          
+          // Send to Team Banner
+          _buildSendToTeamBanner(),
+          
           // Recording indicator
           if (_isRecording)
             Container(
@@ -1596,14 +1981,21 @@ class _ChatScreenState extends State<ChatScreen> {
                           : _isRecording
                               ? _stopRecording
                               : _startRecording),
-                      icon: Icon(
-                        _isLoading 
-                            ? Icons.hourglass_empty 
-                            : (_isTyping 
-                                ? Icons.send 
-                                : (_isRecording ? Icons.stop : Icons.mic)),
-                        color: Colors.white,
-                      ),
+                      icon: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Icon(
+                              _isTyping 
+                                  ? Icons.send 
+                                  : (_isRecording ? Icons.stop : Icons.mic),
+                              color: Colors.white,
+                            ),
                     ),
                   ),
                 ],
@@ -1611,6 +2003,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -1835,7 +2228,7 @@ class ChatBubble extends StatelessWidget {
                     bottom: 4,
                     right: 4,
                     child: Icon(
-                      Icons.hourglass_empty,
+                      Icons.access_time,
                       size: 14,
                       color: Colors.white70,
                     ),
