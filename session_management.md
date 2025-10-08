@@ -6,7 +6,7 @@ Technical foundation for managing chat sessions with backend integration. Each s
 ## Backend Integration
 
 ### Webhook Endpoint
-- **URL**: `POST https://kwaaijongens.app.n8n.cloud/webhook/sessions`
+- **URL**: `POST https://automation.kwaaijongens.nl/webhook/sessions`
 - **Authentication**: Basic Auth
   - Username: `kj-app`
   - Password: `ar6e!GyXu`

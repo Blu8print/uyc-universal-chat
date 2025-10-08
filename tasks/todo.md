@@ -1,96 +1,79 @@
-# Bug Fix: Duplicate File Sending and Webhook Response Issues
+# Webhook Migration: New Domain and Basic Authentication
 
-## Analysis Summary
+## Summary
+Migrated all webhook endpoints from `kwaaijongens.app.n8n.cloud` to `automation.kwaaijongens.nl` and implemented Basic Authentication across all HTTP requests.
 
-After examining the codebase, I've identified the root causes of the bugs:
+## Changes Made
 
-### Issue 1: Double Sending of Photos and Documents
-The problem is in the `_sendBulkMessages` logic at lines 683-723 in `chat_screen.dart`. Here's what happens:
+### 1. Updated Webhook URLs
 
-1. When a user sends a photo/document, `_sendImageMessage` or `_sendDocumentMessage` creates a message with `pending` status and calls `_sendBulkMessages`
-2. `_sendBulkMessages` gets all pending messages INCLUDING the new message that was just added (line 691)
-3. This creates a duplicate: the new message appears both in `pendingMessages` and is explicitly added again
-4. The file gets processed twice in the `fileMessages` list
+**New Domain:** `automation.kwaaijongens.nl`
 
-### Issue 2: Webhook Response Not Handled Correctly
-The webhook response parsing has multiple fallback attempts but the logic is inconsistent:
-- Different response field checks (`output`, `response`, `message`, `reply`, `text`) 
-- Raw response body fallback doesn't handle all edge cases
-- Empty response handling is inconsistent across different endpoint types
+| Endpoint | Old URL | New URL |
+|----------|---------|---------|
+| Chat | `kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat` | `automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat` |
+| Images | `kwaaijongens.app.n8n.cloud/webhook/e54fbfea-e46e-4b21-9a05-48d75d568ae3` | `automation.kwaaijongens.nl/webhook/media_image` |
+| Documents | `kwaaijongens.app.n8n.cloud/webhook/d64bd02a-38b7-4ea0-b408-218ecb907038` | `automation.kwaaijongens.nl/webhook/media_document` |
+| Email | `kwaaijongens.app.n8n.cloud/webhook/69ffb2fc-518b-42a9-a490-a308c2e9a454` | `automation.kwaaijongens.nl/webhook/send-email` |
+| Send SMS | `kwaaijongens.app.n8n.cloud/webhook/send-sms` | `automation.kwaaijongens.nl/webhook/send-sms` |
+| Verify SMS | `kwaaijongens.app.n8n.cloud/webhook/verify-sms` | `automation.kwaaijongens.nl/webhook/verify-sms` |
+| Version Check | `kwaaijongens.app.n8n.cloud/webhook/version-check` | `automation.kwaaijongens.nl/webhook/version-check` |
+| FCM Token | `kwaaijongens.app.n8n.cloud/webhook/fcm-token` | `automation.kwaaijongens.nl/webhook/fcm-token` |
+| Sessions | `kwaaijongens.app.n8n.cloud/webhook/sessions` | `automation.kwaaijongens.nl/webhook/sessions` |
 
-## Todo Items
+### 2. Implemented Basic Authentication
 
-- [x] **Fix duplicate file sending bug**
-  - Remove the logic that adds `newMessage` to `allMessagesToSend` since it's already included in `_getPendingMessages()`
-  - Ensure `_getPendingMessages()` correctly returns all pending messages including the newest one
+Added Basic Auth headers to all webhook requests. Note: Sessions endpoint uses separate Basic Auth credentials (`kj-app:ar6e!GyXu`).
 
-- [x] **Improve webhook response handling**
-  - Create a standardized response parsing function to handle all webhook responses consistently
-  - Add better error handling for malformed JSON responses
-  - Ensure consistent fallback behavior across all webhook endpoints
+**Files Modified:**
 
-- [x] **Test the fixes**
-  - Test sending single photo - should only send once
-  - Test sending single document - should only send once  
-  - Test webhook responses with various formats (empty, JSON, string, malformed)
-  - Test multiple file uploads to ensure no regression
+#### lib/services/api_service.dart
+- Added `_basicAuth` credential constant
+- Added `_getBasicAuthHeader()` helper method
+- Updated URLs for: sendSms, verifySms, versionCheck, fcmToken
+- Added Basic Auth to: `sendSmsCode()`, `verifySmsAndRegister()`, `sendFCMToken()`, `checkVersion()`
 
-- [x] **Fix HTML iframe response parsing**
-  - Handle HTML responses containing iframes with srcdoc attributes
-  - Extract the actual message content from srcdoc instead of showing full HTML
-  - Test with picture upload that returns iframe response
+#### lib/screens/chat_screen.dart
+- Added `_basicAuth` credential constant
+- Added `_getBasicAuthHeader()` helper method
+- Updated URLs for: image, email endpoints
+- Added Basic Auth to: `_sendToN8n()`, `_sendBulkTextMessages()`, `_sendImageFileMessage()`, `_sendAudioFileMessage()`, `_sendDocumentFileMessage()`, email sending
 
-- [x] **Code cleanup**
-  - Extract webhook response parsing into a reusable utility function
-  - Add debug logging to track message sending flow for troubleshooting
+#### lib/services/document_routing_service.dart
+- Added `_basicAuth` credential constant
+- Added `_getBasicAuthHeader()` helper method
+- Updated `_documentWebhookUrl` to media_document endpoint
+- Added Basic Auth to: `sendDocument()`
 
-## Implementation Plan
+#### lib/services/auth_service.dart
+- Updated `_defaultWebhookUrl` (already done in previous task)
 
-1. **Fix the duplicate sending bug**: The core issue is in `_sendBulkMessages` line 691 where `newMessage` is explicitly added to the list that already contains it from `_getPendingMessages()`.
+### 3. Updated Documentation
 
-2. **Standardize webhook response parsing**: Create a helper method to consistently parse webhook responses across all endpoints.
+- **README.md**: Updated webhook endpoints list with all new URLs
+- **tasks/todo.md**: Created this documentation file
 
-3. **Test thoroughly**: Verify that photos and documents are sent only once and webhook responses are handled correctly.
+## Impact
 
-## Review
+- All webhook communications now go through the new automation domain
+- Basic Authentication secures all webhook endpoints
+- Sessions endpoint now on new domain with its separate auth credentials
+- Backward compatible - no breaking changes to request/response formats
 
-### Changes Made
+## Testing Checklist
 
-**1. Fixed Duplicate File Sending Bug (chat_screen.dart:689-690)**
-- **Problem**: `_sendBulkMessages()` was adding `newMessage` to a list that already contained it from `_getPendingMessages()`
-- **Solution**: Removed the explicit addition of `newMessage` to `allMessagesToSend` since `_getPendingMessages()` already returns all pending messages including the newest one
-- **Impact**: Photos and documents will now only be sent once instead of twice
+- [ ] SMS verification flow
+- [ ] Chat message sending
+- [ ] Image upload and analysis
+- [ ] Document upload (PDF, Office files)
+- [ ] Audio message transcription
+- [ ] Email sending to team
+- [ ] Version checking
+- [ ] FCM token registration
+- [ ] Session management (create, list, update, delete, get)
 
-**2. Standardized Webhook Response Parsing (chat_screen.dart:334-368)**
-- **Problem**: Inconsistent response parsing across different webhook endpoints with varying fallback logic
-- **Solution**: Created `_parseWebhookResponse()` helper method that consistently handles:
-  - Empty responses
-  - HTML iframe responses with srcdoc extraction (e.g., extracts "We hebben je afbeelding ontvangen" from iframe HTML)
-  - JSON parsing with multiple field fallbacks (`output`, `response`, `message`, `reply`, `text`, `analysis`)
-  - String responses
-  - Malformed JSON with raw response fallback
-- **Impact**: All webhook responses now have consistent parsing behavior, including proper handling of HTML iframe responses
+## Security Notes
 
-**3. Updated All Webhook Endpoints**
-- Updated 6 webhook response handlers to use the standardized parsing:
-  - Chat messages (_sendToN8n)
-  - Bulk text messages (_sendBulkTextMessages) 
-  - Image uploads (_sendImageFileMessage)
-  - Audio uploads (_sendAudioFileMessage)
-  - Document uploads (_sendDocumentFileMessage)
-  - Email sending (_sendEmail)
-
-### Testing Results
-- Logic verification completed: `_getPendingMessages()` correctly returns all pending customer messages
-- Code analysis shows no compilation errors
-- Webhook response parsing now handles all edge cases consistently
-
-### Files Modified
-- `lib/screens/chat_screen.dart` - Main bug fixes and improvements
-- `tasks/todo.md` - Planning and tracking documentation
-
-## Notes
-- Changes are minimal and focused on the specific bugs
-- Maintains existing functionality for text messages and bulk operations  
-- Preserves current error handling patterns where they work correctly
-- All changes follow the existing code style and patterns
+- Basic Auth credentials are stored as constants in the codebase
+- All requests use HTTPS for encryption
+- Session endpoint uses separate authentication mechanism

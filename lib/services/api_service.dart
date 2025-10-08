@@ -3,14 +3,21 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // Your production URLs
-  static const String _sendSmsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/send-sms';
-  static const String _verifySmsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/verify-sms';
-  static const String _versionCheckUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/version-check';
-  static const String _fcmTokenUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/fcm-token';
-  static const String _sessionsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/sessions';
-  
-  // Session management credentials
+  static const String _sendSmsUrl = 'https://automation.kwaaijongens.nl/webhook/send-sms';
+  static const String _verifySmsUrl = 'https://automation.kwaaijongens.nl/webhook/verify-sms';
+  static const String _versionCheckUrl = 'https://automation.kwaaijongens.nl/webhook/version-check';
+  static const String _fcmTokenUrl = 'https://automation.kwaaijongens.nl/webhook/fcm-token';
+  static const String _sessionsUrl = 'https://automation.kwaaijongens.nl/webhook/sessions';
+
+  // Authentication credentials
+  static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
   static const String _sessionAuth = 'kj-app:ar6e!GyXu';
+
+  // Helper method to get Basic Auth header
+  static String _getBasicAuthHeader() {
+    final authBytes = utf8.encode(_basicAuth);
+    return 'Basic ${base64Encode(authBytes)}';
+  }
   
   // Send SMS verification code
   static Future<ApiResponse> sendSmsCode(String phoneNumber, String name, String email) async {
@@ -20,6 +27,7 @@ class ApiService {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
         },
         body: jsonEncode({
           'phoneNumber': phoneNumber,
@@ -55,6 +63,7 @@ class ApiService {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
         },
         body: jsonEncode({
           'phoneNumber': phoneNumber,
@@ -119,6 +128,7 @@ class ApiService {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
           'X-Session-ID': sessionId,
         },
         body: jsonEncode({
@@ -496,6 +506,7 @@ class ApiService {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
         },
         body: jsonEncode({
           'version': version,

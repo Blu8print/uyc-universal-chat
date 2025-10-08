@@ -6,7 +6,7 @@ class AuthService {
   static User? _currentUser;
   
   // Default webhook URL
-  static const String _defaultWebhookUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
+  static const String _defaultWebhookUrl = 'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
   
   // Get current user
   static User? get currentUser => _currentUser;

@@ -73,12 +73,22 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _bannerAvailable = false;
   Timer? _bannerTimer;
   String _chatTitle = 'Chat';
-  
-  final String _n8nChatUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
-  final String _n8nImageUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/e54fbfea-e46e-4b21-9a05-48d75d568ae3';
-  final String _n8nEmailUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/69ffb2fc-518b-42a9-a490-a308c2e9a454';
-  final String _n8nSessionsUrl = 'https://kwaaijongens.app.n8n.cloud/webhook/sessions';
-  
+
+  final String _n8nChatUrl = 'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
+  final String _n8nImageUrl = 'https://automation.kwaaijongens.nl/webhook/media_image';
+  final String _n8nDocumentUrl = 'https://automation.kwaaijongens.nl/webhook/media_document';
+  final String _n8nEmailUrl = 'https://automation.kwaaijongens.nl/webhook/send-email';
+  final String _n8nSessionsUrl = 'https://automation.kwaaijongens.nl/webhook/sessions';
+
+  // Basic Auth credentials
+  static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
+
+  // Helper method to get Basic Auth header
+  String _getBasicAuthHeader() {
+    final authBytes = utf8.encode(_basicAuth);
+    return 'Basic ${base64Encode(authBytes)}';
+  }
+
   final List<ChatMessage> _messages = [];
 
   @override
@@ -319,6 +329,7 @@ class _ChatScreenState extends State<ChatScreen> {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
           'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
         },
         body: jsonEncode({
@@ -923,12 +934,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Send the last (newest) text message to get a bot response
     final lastMessage = textMessages.last;
-    
+
     final response = await http.post(
       Uri.parse(_n8nChatUrl),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'Authorization': _getBasicAuthHeader(),
         'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
       },
       body: jsonEncode({
@@ -981,6 +993,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     request.fields['action'] = 'sendImage';
     request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['Authorization'] = _getBasicAuthHeader();
     request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
     
     final clientData = AuthService.getClientData();
@@ -1027,9 +1040,10 @@ class _ChatScreenState extends State<ChatScreen> {
       'POST',
       Uri.parse(_n8nChatUrl),
     );
-    
+
     request.fields['action'] = 'sendAudio';
     request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['Authorization'] = _getBasicAuthHeader();
     request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
     
     final clientData = AuthService.getClientData();
@@ -1072,16 +1086,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send document file message (simplified version)
   Future<void> _sendDocumentFileMessage(ChatMessage message) async {
-    final user = AuthService.currentUser;
-    final webhookUrl = user?.webhookUrl ?? _n8nChatUrl;
-    
     var request = http.MultipartRequest(
       'POST',
-      Uri.parse(webhookUrl),
+      Uri.parse(_n8nDocumentUrl),
     );
 
     request.fields['action'] = 'sendDocument';
     request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['Authorization'] = _getBasicAuthHeader();
     request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
     
     final clientData = AuthService.getClientData();
@@ -1161,6 +1173,7 @@ class _ChatScreenState extends State<ChatScreen> {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
           'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
         },
         body: jsonEncode(emailData),

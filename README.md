@@ -105,10 +105,15 @@ lib/
 ### 📡 API Integration
 
 #### Webhook Endpoints
-- **Chat**: `https://kwaaijongens.app.n8n.cloud/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat`
-- **Images**: `https://kwaaijongens.app.n8n.cloud/webhook/e54fbfea-e46e-4b21-9a05-48d75d568ae3`
-- **Email**: `https://kwaaijongens.app.n8n.cloud/webhook/69ffb2fc-518b-42a9-a490-a308c2e9a454`
-- **Sessions**: `https://kwaaijongens.app.n8n.cloud/webhook/sessions`
+- **Chat**: `https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat`
+- **Images**: `https://automation.kwaaijongens.nl/webhook/media_image`
+- **Documents**: `https://automation.kwaaijongens.nl/webhook/media_document`
+- **Email**: `https://automation.kwaaijongens.nl/webhook/send-email`
+- **Send SMS**: `https://automation.kwaaijongens.nl/webhook/send-sms`
+- **Verify SMS**: `https://automation.kwaaijongens.nl/webhook/verify-sms`
+- **Version Check**: `https://automation.kwaaijongens.nl/webhook/version-check`
+- **FCM Token**: `https://automation.kwaaijongens.nl/webhook/fcm-token`
+- **Sessions**: `https://automation.kwaaijongens.nl/webhook/sessions`
 
 #### Authentication
 - Basic Authentication with credentials
