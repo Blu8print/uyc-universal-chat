@@ -19,6 +19,7 @@ import 'start_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:light_compressor/light_compressor.dart';
 
 void main() {
   runApp(const MyApp());
@@ -65,6 +66,7 @@ class _ChatScreenState extends State<ChatScreen> {
   
   bool _isTyping = false;
   bool _isLoading = false;
+  bool _isUploadingFile = false;
   bool _isRecording = false;
   bool _isEmailSending = false;
   bool _isDeletingSession = false;
@@ -77,8 +79,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final String _n8nChatUrl = 'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
   final String _n8nImageUrl = 'https://automation.kwaaijongens.nl/webhook/media_image';
   final String _n8nDocumentUrl = 'https://automation.kwaaijongens.nl/webhook/media_document';
+  final String _n8nVideoUrl = 'https://automation.kwaaijongens.nl/webhook/media_video';
   final String _n8nEmailUrl = 'https://automation.kwaaijongens.nl/webhook/send-email';
-  final String _n8nSessionsUrl = 'https://automation.kwaaijongens.nl/webhook/sessions';
 
   // Basic Auth credentials
   static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
@@ -586,7 +588,7 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Afbeelding selecteren',
+                'Media selecteren',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -595,18 +597,34 @@ class _ChatScreenState extends State<ChatScreen> {
               const SizedBox(height: 16),
               ListTile(
                 leading: const Icon(Icons.camera_alt, color: Color(0xFFCC0001)),
-                title: const Text('Camera'),
+                title: const Text('Foto maken'),
                 onTap: () {
                   Navigator.pop(context);
                   _pickImage(ImageSource.camera);
                 },
               ),
               ListTile(
+                leading: const Icon(Icons.videocam, color: Color(0xFFCC0001)),
+                title: const Text('Video opnemen'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickVideo(ImageSource.camera);
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.photo_library, color: Color(0xFFCC0001)),
-                title: const Text('Galerij'),
+                title: const Text('Foto kiezen'),
                 onTap: () {
                   Navigator.pop(context);
                   _pickImage(ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.video_library, color: Color(0xFFCC0001)),
+                title: const Text('Video kiezen'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickVideo(ImageSource.gallery);
                 },
               ),
               const SizedBox(height: 16),
@@ -676,11 +694,75 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Fout bij het selecteren van afbeelding: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickVideo(ImageSource source) async {
+    // Hide banner temporarily during video picking
+    setState(() {
+      _showSendToTeamBanner = false;
+    });
+
+    try {
+      // Request permissions
+      if (source == ImageSource.camera) {
+        final cameraStatus = await Permission.camera.request();
+        if (cameraStatus.isDenied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Camera toegang is vereist om video\'s te maken.'),
+              ),
+            );
+          }
+          return;
+        }
+      } else {
+        final photosStatus = await Permission.photos.request();
+        if (photosStatus.isDenied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Galerij toegang is vereist om video\'s te selecteren.'),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      final XFile? video = await _imagePicker.pickVideo(
+        source: source,
+        maxDuration: const Duration(minutes: 5),
+      );
+
+      if (video != null) {
+        final videoFile = File(video.path);
+        await _sendVideoMessage(videoFile);
+      } else {
+        // Video picking cancelled - show banner again if available and text field empty
+        setState(() {
+          _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+        });
+      }
+    } catch (e) {
+      // Error occurred - show banner again if available and text field empty
+      setState(() {
+        _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fout bij het selecteren van video: $e'),
           ),
         );
       }
@@ -766,6 +848,132 @@ class _ChatScreenState extends State<ChatScreen> {
       imageFile: imageFile,
       attachmentType: AttachmentType.image,
       status: MessageStatus.pending, // Start as pending
+    );
+
+    // Add message immediately
+    await _addMessage(newMessage);
+    _scrollToBottom();
+
+    // Send in bulk with all pending messages
+    await _sendBulkMessages(newMessage);
+  }
+
+  Future<void> _sendVideoMessage(File videoFile) async {
+    // Check file size (200MB limit)
+    final fileSize = await videoFile.length();
+    const maxSize = 200 * 1024 * 1024; // 200MB in bytes
+
+    if (fileSize > maxSize) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Video is te groot (max 200MB)'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Disable banner availability when sending video
+    setState(() {
+      _bannerAvailable = false;
+      _showSendToTeamBanner = false;
+    });
+
+    // Show compressing message
+    final compressingMessage = ChatMessage(
+      text: "🎬 Video wordt gecomprimeerd...",
+      isCustomer: false,
+      timestamp: DateTime.now(),
+      status: MessageStatus.sent,
+    );
+    setState(() {
+      _messages.add(compressingMessage);
+    });
+    _scrollToBottom();
+
+    try {
+      // Compress video
+      final result = await LightCompressor().compressVideo(
+        path: videoFile.path,
+        videoQuality: VideoQuality.medium,
+        isMinBitrateCheckEnabled: false,
+        video: Video(videoName: 'compressed_${DateTime.now().millisecondsSinceEpoch}'),
+        android: AndroidConfig(
+          isSharedStorage: false,
+        ),
+        ios: IOSConfig(
+          saveInGallery: false,
+        ),
+      );
+
+      // Remove compressing message
+      setState(() {
+        _messages.remove(compressingMessage);
+      });
+
+      if (result is OnSuccess) {
+        // Use compressed video
+        videoFile = File(result.destinationPath);
+
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Video gecomprimeerd en klaar om te verzenden'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else if (result is OnFailure) {
+        // Compression failed, show error but continue with original
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Compressie mislukt: ${result.message}. Originele video wordt verzonden.'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else if (result is OnCancelled) {
+        // Compression cancelled
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Compressie geannuleerd'),
+              backgroundColor: Colors.grey,
+            ),
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      // Remove compressing message
+      setState(() {
+        _messages.remove(compressingMessage);
+      });
+
+      // Handle compression error, continue with original video
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Compressie fout: $e. Originele video wordt verzonden.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+
+    // Create new video message with pending status
+    final newMessage = ChatMessage(
+      text: '🎥 Video',
+      isCustomer: true,
+      timestamp: DateTime.now(),
+      videoFile: videoFile,
+      attachmentType: AttachmentType.video,
+      status: MessageStatus.pending,
     );
 
     // Add message immediately
@@ -889,10 +1097,6 @@ class _ChatScreenState extends State<ChatScreen> {
   // Bulk send all pending messages plus new message
   Future<void> _sendBulkMessages(ChatMessage newMessage) async {
     try {
-      setState(() {
-        _isLoading = true;
-      });
-
       // Get all pending messages (which already includes the new message)
       List<ChatMessage> allMessagesToSend = _getPendingMessages();
 
@@ -903,6 +1107,11 @@ class _ChatScreenState extends State<ChatScreen> {
       List<ChatMessage> fileMessages = allMessagesToSend
           .where((msg) => msg.attachmentType != AttachmentType.none)
           .toList();
+
+      setState(() {
+        _isLoading = true;
+        _isUploadingFile = fileMessages.isNotEmpty;
+      });
 
       // Send text messages in bulk if any exist
       if (textMessages.isNotEmpty) {
@@ -923,6 +1132,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } finally {
       setState(() {
         _isLoading = false;
+        _isUploadingFile = false;
       });
       _scrollToBottom();
     }
@@ -981,6 +1191,8 @@ class _ChatScreenState extends State<ChatScreen> {
       await _sendAudioFileMessage(fileMessage);
     } else if (fileMessage.attachmentType == AttachmentType.document && fileMessage.documentFile != null) {
       await _sendDocumentFileMessage(fileMessage);
+    } else if (fileMessage.attachmentType == AttachmentType.video && fileMessage.videoFile != null) {
+      await _sendVideoFileMessage(fileMessage);
     }
   }
 
@@ -1132,6 +1344,60 @@ class _ChatScreenState extends State<ChatScreen> {
       _fetchChatTitle();
     } else {
       throw Exception('Failed to send document: ${response.statusCode}');
+    }
+  }
+
+  // Send video file message
+  Future<void> _sendVideoFileMessage(ChatMessage message) async {
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse(_n8nVideoUrl),
+    );
+
+    request.fields['action'] = 'sendVideo';
+    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['Authorization'] = _getBasicAuthHeader();
+    request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+
+    final clientData = AuthService.getClientData();
+    if (clientData != null) {
+      request.fields['clientData'] = jsonEncode(clientData);
+    }
+
+    // Get video filename
+    final videoPath = message.videoFile!.path;
+    final filename = videoPath.split('/').last;
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'video',
+        message.videoFile!.path,
+        filename: filename,
+      ),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      String botResponse = _parseWebhookResponse(response.body, 'Video ontvangen en geanalyseerd');
+
+      setState(() {
+        _messages.add(ChatMessage(
+          text: botResponse,
+          isCustomer: false,
+          timestamp: DateTime.now(),
+          status: MessageStatus.sent,
+        ));
+      });
+
+      // Show send to team banner after AI response
+      _displaySendToTeamBanner();
+
+      // Fetch updated chat title
+      _fetchChatTitle();
+    } else {
+      throw Exception('Failed to send video: ${response.statusCode}');
     }
   }
 
@@ -1333,42 +1599,30 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _fetchChatTitle() async {
     try {
-      final clientData = AuthService.getClientData();
-      final requestBody = {
-        'method': 'get',
-        'sessionId': SessionService.currentSessionId ?? 'no-session',
-        'phoneNumber': clientData?['phone'] ?? '',
-        'name': clientData?['name'] ?? '',
-        'company': clientData?['companyName'] ?? '',
-      };
-      
-      print('DEBUG: Fetching chat title with: ${jsonEncode(requestBody)}');
-      
-      // Use same authentication as session list API
-      final authBytes = utf8.encode('kj-app:ar6e!GyXu');
-      final authHeader = 'Basic ${base64Encode(authBytes)}';
-      
-      final response = await http.post(
-        Uri.parse(_n8nSessionsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': authHeader,
-          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 10));
+      final sessionId = SessionService.currentSessionId;
+      if (sessionId == null) return;
 
-      print('DEBUG: Chat title API response: ${response.statusCode} - ${response.body}');
-      
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> session = jsonDecode(response.body);
-        final sessionTitle = session['session_title']?.toString();
+      final clientData = AuthService.getClientData();
+      if (clientData == null) return;
+
+      print('DEBUG: Fetching chat title for session: $sessionId');
+
+      final response = await ApiService.getSessionDetails(
+        sessionId: sessionId,
+        phoneNumber: clientData['phone'] ?? '',
+        name: clientData['name'] ?? '',
+        companyName: clientData['companyName'] ?? '',
+      );
+
+      print('DEBUG: Chat title API response: ${response.success} - ${response.message}');
+
+      if (response.success && response.sessionData != null) {
+        final sessionTitle = response.sessionData!.title;
         print('DEBUG: Extracted session title: $sessionTitle');
         print('DEBUG: Current _chatTitle value: $_chatTitle');
         print('DEBUG: Widget mounted: $mounted');
-        
-        if (sessionTitle != null && sessionTitle.isNotEmpty) {
+
+        if (sessionTitle.isNotEmpty) {
           print('DEBUG: Updating chat title to: $sessionTitle');
           if (mounted) {
             setState(() {
@@ -1379,7 +1633,7 @@ class _ChatScreenState extends State<ChatScreen> {
             print('DEBUG: Widget not mounted, skipping setState');
           }
         } else {
-          print('DEBUG: Session title is null or empty');
+          print('DEBUG: Session title is empty');
         }
       }
     } catch (e) {
@@ -1391,44 +1645,27 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<bool> _deleteSessionOnWebhook(String sessionId) async {
     try {
       final clientData = AuthService.getClientData();
-      final requestBody = {
-        'method': 'delete',
-        'sessionId': sessionId,
-        'phoneNumber': clientData?['phone'] ?? '',
-        'name': clientData?['name'] ?? '',
-        'companyName': clientData?['companyName'] ?? '',
-      };
-      
-      print('DEBUG: Deleting session with: ${jsonEncode(requestBody)}');
-      
-      // Use same authentication as other session APIs
-      final authBytes = utf8.encode('kj-app:ar6e!GyXu');
-      final authHeader = 'Basic ${base64Encode(authBytes)}';
-      
-      final response = await http.post(
-        Uri.parse(_n8nSessionsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': authHeader,
-          'X-Session-ID': sessionId,
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 10));
+      if (clientData == null) {
+        print('DEBUG: No client data available');
+        return false;
+      }
 
-      print('DEBUG: Delete session API response: ${response.statusCode} - ${response.body}');
-      
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        if (responseData['response'] == 'success') {
-          print('DEBUG: Session deleted successfully');
-          return true;
-        } else {
-          print('DEBUG: Unexpected response: ${responseData}');
-          return false;
-        }
+      print('DEBUG: Deleting session: $sessionId');
+
+      final response = await ApiService.deleteSession(
+        sessionId: sessionId,
+        phoneNumber: clientData['phone'] ?? '',
+        name: clientData['name'] ?? '',
+        companyName: clientData['companyName'] ?? '',
+      );
+
+      print('DEBUG: Delete session API response: ${response.success} - ${response.message}');
+
+      if (response.success) {
+        print('DEBUG: Session deleted successfully');
+        return true;
       } else {
-        print('DEBUG: Delete session failed with status: ${response.statusCode}');
+        print('DEBUG: Failed to delete session: ${response.message}');
         return false;
       }
     } catch (e) {
@@ -1885,7 +2122,7 @@ class _ChatScreenState extends State<ChatScreen> {
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index == _messages.length && _isLoading) {
-                  return const TypingIndicator();
+                  return TypingIndicator(isUploadingFile: _isUploadingFile);
                 }
                 return ChatBubble(message: _messages[index]);
               },
@@ -2027,6 +2264,7 @@ enum AttachmentType {
   audio,
   image,
   document,
+  video,
 }
 
 enum MessageStatus { pending, sent }
@@ -2038,6 +2276,7 @@ class ChatMessage {
   final File? audioFile;
   final File? imageFile;
   final File? documentFile;
+  final File? videoFile;
   final AttachmentType attachmentType;
   final MessageStatus status;
   final bool fromFCM;
@@ -2049,6 +2288,7 @@ class ChatMessage {
     this.audioFile,
     this.imageFile,
     this.documentFile,
+    this.videoFile,
     this.attachmentType = AttachmentType.none,
     this.status = MessageStatus.pending,
     this.fromFCM = false,
@@ -2063,6 +2303,7 @@ class ChatMessage {
       'audioFilePath': audioFile?.path,
       'imageFilePath': imageFile?.path,
       'documentFilePath': documentFile?.path,
+      'videoFilePath': videoFile?.path,
       'attachmentType': attachmentType.toString(),
       'status': status.toString(),
       'fromFCM': fromFCM,
@@ -2075,14 +2316,17 @@ class ChatMessage {
       text: json['text'],
       isCustomer: json['isCustomer'],
       timestamp: DateTime.parse(json['timestamp']),
-      audioFile: json['audioFilePath'] != null 
-          ? File(json['audioFilePath']) 
+      audioFile: json['audioFilePath'] != null
+          ? File(json['audioFilePath'])
           : null,
-      imageFile: json['imageFilePath'] != null 
-          ? File(json['imageFilePath']) 
+      imageFile: json['imageFilePath'] != null
+          ? File(json['imageFilePath'])
           : null,
-      documentFile: json['documentFilePath'] != null 
-          ? File(json['documentFilePath']) 
+      documentFile: json['documentFilePath'] != null
+          ? File(json['documentFilePath'])
+          : null,
+      videoFile: json['videoFilePath'] != null
+          ? File(json['videoFilePath'])
           : null,
       attachmentType: _parseAttachmentType(json['attachmentType']),
       status: _parseMessageStatus(json['status']),
@@ -2099,6 +2343,8 @@ class ChatMessage {
         return AttachmentType.image;
       case 'AttachmentType.document':
         return AttachmentType.document;
+      case 'AttachmentType.video':
+        return AttachmentType.video;
       default:
         return AttachmentType.none;
     }
@@ -2272,7 +2518,9 @@ class ChatBubble extends StatelessWidget {
 }
 
 class TypingIndicator extends StatefulWidget {
-  const TypingIndicator({super.key});
+  final bool isUploadingFile;
+
+  const TypingIndicator({super.key, this.isUploadingFile = false});
 
   @override
   State<TypingIndicator> createState() => _TypingIndicatorState();
@@ -2326,9 +2574,9 @@ class _TypingIndicatorState extends State<TypingIndicator>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Aan het typen',
-                  style: TextStyle(
+                Text(
+                  widget.isUploadingFile ? 'Bestand uploaden' : 'Aan het typen',
+                  style: const TextStyle(
                     color: Colors.black87,
                     fontSize: 16,
                   ),

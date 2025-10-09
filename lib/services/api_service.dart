@@ -11,7 +11,7 @@ class ApiService {
 
   // Authentication credentials
   static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
-  static const String _sessionAuth = 'kj-app:ar6e!GyXu';
+  static const String _sessionAuth = 'SystemArchitect:A\$pp_S3cr3t';
 
   // Helper method to get Basic Auth header
   static String _getBasicAuthHeader() {
