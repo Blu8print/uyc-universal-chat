@@ -352,17 +352,37 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        
-        if (responseData['success'] == true) {
+
+        // Handle direct session data response from server
+        if (responseData is Map && (responseData.containsKey('session_id') || responseData.containsKey('session_title'))) {
+          return SessionResponse(
+            success: true,
+            message: 'Session updated successfully',
+            sessionData: SessionData(
+              sessionId: responseData['session_id'] ?? sessionId,
+              title: responseData['session_title'] ?? title ?? 'Updated Session',
+              description: responseData['session_description'] ?? description ?? '',
+              thumbnail: responseData['session_thumbnail'],
+              lastActivity: responseData['last_modified'] ?? responseData['created_at'],
+              messageCount: 0,
+              createdAt: responseData['created_at'],
+            ),
+          );
+        }
+        // Handle wrapped response format (fallback)
+        else if (responseData is Map && responseData['success'] == true) {
           final data = responseData['data'] ?? {};
           return SessionResponse(
             success: true,
             message: responseData['message'] ?? 'Session updated successfully',
             sessionData: SessionData(
-              sessionId: sessionId,
-              title: data['title'] ?? title ?? 'Updated Session',
-              description: data['description'] ?? description ?? '',
-              thumbnail: data['thumbnail'],
+              sessionId: data['session_id'] ?? data['sessionId'] ?? sessionId,
+              title: data['session_title'] ?? data['title'] ?? title ?? 'Updated Session',
+              description: data['session_description'] ?? data['description'] ?? description ?? '',
+              thumbnail: data['session_thumbnail'] ?? data['thumbnail'],
+              lastActivity: data['last_modified'] ?? data['lastActivity'] ?? data['created_at'],
+              messageCount: data['messageCount'] ?? 0,
+              createdAt: data['created_at'] ?? data['createdAt'],
             ),
           );
         } else {
@@ -462,20 +482,37 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        
-        if (responseData['success'] == true) {
+
+        // Handle direct session data response from server
+        if (responseData is Map && (responseData.containsKey('session_id') || responseData.containsKey('session_title'))) {
+          return SessionResponse(
+            success: true,
+            message: 'Session details retrieved successfully',
+            sessionData: SessionData(
+              sessionId: responseData['session_id'] ?? sessionId,
+              title: responseData['session_title'] ?? 'Session',
+              description: responseData['session_description'] ?? '',
+              thumbnail: responseData['session_thumbnail'],
+              lastActivity: responseData['last_modified'] ?? responseData['created_at'],
+              messageCount: 0, // Not provided by server
+              createdAt: responseData['created_at'],
+            ),
+          );
+        }
+        // Handle wrapped response format (fallback)
+        else if (responseData is Map && responseData['success'] == true) {
           final data = responseData['data'] ?? {};
           return SessionResponse(
             success: true,
             message: 'Session details retrieved successfully',
             sessionData: SessionData(
-              sessionId: sessionId,
-              title: data['title'] ?? 'Session',
-              description: data['description'] ?? '',
-              thumbnail: data['thumbnail'],
-              lastActivity: data['lastActivity'],
+              sessionId: data['session_id'] ?? data['sessionId'] ?? sessionId,
+              title: data['session_title'] ?? data['title'] ?? 'Session',
+              description: data['session_description'] ?? data['description'] ?? '',
+              thumbnail: data['session_thumbnail'] ?? data['thumbnail'],
+              lastActivity: data['last_modified'] ?? data['lastActivity'] ?? data['created_at'],
               messageCount: data['messageCount'] ?? 0,
-              createdAt: data['createdAt'],
+              createdAt: data['created_at'] ?? data['createdAt'],
             ),
           );
         } else {
