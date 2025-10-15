@@ -75,6 +75,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _bannerAvailable = false;
   Timer? _bannerTimer;
   String _chatTitle = 'Chat';
+  String? _chatType;
 
   final String _n8nChatUrl = 'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
   final String _n8nImageUrl = 'https://automation.kwaaijongens.nl/webhook/media_image';
@@ -106,15 +107,18 @@ class _ChatScreenState extends State<ChatScreen> {
       switch (widget.actionContext) {
         case 'project':
           contextMessage = 'Ik wil een project doorgeven. ';
+          _chatType = 'project_doorgeven';
           break;
         case 'knowledge':
           contextMessage = 'Ik wil mijn vakkennis delen voor een blog. ';
+          _chatType = 'vakkennis_delen';
           break;
         case 'social':
           contextMessage = 'Ik wil content maken voor social media. ';
+          _chatType = 'social_media';
           break;
       }
-      
+
       if (contextMessage.isNotEmpty) {
         // Add context message as first user message
         final contextChatMessage = ChatMessage(
@@ -122,7 +126,7 @@ class _ChatScreenState extends State<ChatScreen> {
           isCustomer: true,
           timestamp: DateTime.now(),
         );
-        
+
         await _addMessage(contextChatMessage);
       }
     }
@@ -1146,6 +1150,18 @@ class _ChatScreenState extends State<ChatScreen> {
     // Send the last (newest) text message to get a bot response
     final lastMessage = textMessages.last;
 
+    final requestBody = {
+      'action': 'sendMessage',
+      'sessionId': SessionService.currentSessionId ?? 'no-session',
+      'chatInput': lastMessage.text,
+      'clientData': AuthService.getClientData(),
+    };
+
+    // Add chatType if available
+    if (_chatType != null) {
+      requestBody['chatType'] = _chatType!;
+    }
+
     final response = await http.post(
       Uri.parse(_n8nChatUrl),
       headers: {
@@ -1154,12 +1170,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'Authorization': _getBasicAuthHeader(),
         'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
       },
-      body: jsonEncode({
-        'action': 'sendMessage',
-        'sessionId': SessionService.currentSessionId ?? 'no-session',
-        'chatInput': lastMessage.text,
-        'clientData': AuthService.getClientData(),
-      }),
+      body: jsonEncode(requestBody),
     ).timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 200) {
@@ -1208,7 +1219,12 @@ class _ChatScreenState extends State<ChatScreen> {
     request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
     request.headers['Authorization'] = _getBasicAuthHeader();
     request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
-    
+
+    // Add chatType if available
+    if (_chatType != null) {
+      request.fields['chatType'] = _chatType!;
+    }
+
     final clientData = AuthService.getClientData();
     if (clientData != null) {
       request.fields['clientData'] = jsonEncode(clientData);
@@ -1258,7 +1274,12 @@ class _ChatScreenState extends State<ChatScreen> {
     request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
     request.headers['Authorization'] = _getBasicAuthHeader();
     request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
-    
+
+    // Add chatType if available
+    if (_chatType != null) {
+      request.fields['chatType'] = _chatType!;
+    }
+
     final clientData = AuthService.getClientData();
     if (clientData != null) {
       request.fields['clientData'] = jsonEncode(clientData);
@@ -1308,7 +1329,12 @@ class _ChatScreenState extends State<ChatScreen> {
     request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
     request.headers['Authorization'] = _getBasicAuthHeader();
     request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
-    
+
+    // Add chatType if available
+    if (_chatType != null) {
+      request.fields['chatType'] = _chatType!;
+    }
+
     final clientData = AuthService.getClientData();
     if (clientData != null) {
       request.fields['clientData'] = jsonEncode(clientData);
@@ -1359,6 +1385,11 @@ class _ChatScreenState extends State<ChatScreen> {
     request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
     request.headers['Authorization'] = _getBasicAuthHeader();
     request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+
+    // Add chatType if available
+    if (_chatType != null) {
+      request.fields['chatType'] = _chatType!;
+    }
 
     final clientData = AuthService.getClientData();
     if (clientData != null) {
