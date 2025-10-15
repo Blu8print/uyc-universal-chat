@@ -81,6 +81,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final String _n8nDocumentUrl = 'https://automation.kwaaijongens.nl/webhook/media_document';
   final String _n8nVideoUrl = 'https://automation.kwaaijongens.nl/webhook/media_video';
   final String _n8nEmailUrl = 'https://automation.kwaaijongens.nl/webhook/send-email';
+  final String _n8nSessionsUrl = 'https://automation.kwaaijongens.nl/webhook/sessions';
 
   // Basic Auth credentials
   static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
@@ -1599,30 +1600,38 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _fetchChatTitle() async {
     try {
-      final sessionId = SessionService.currentSessionId;
-      if (sessionId == null) return;
-
       final clientData = AuthService.getClientData();
-      if (clientData == null) return;
+      final requestBody = {
+        'method': 'get',
+        'sessionId': SessionService.currentSessionId ?? 'no-session',
+        'phoneNumber': clientData?['phone'] ?? '',
+        'name': clientData?['name'] ?? '',
+        'company': clientData?['companyName'] ?? '',
+      };
+      
+      print('DEBUG: Fetching chat title with: ${jsonEncode(requestBody)}');
 
-      print('DEBUG: Fetching chat title for session: $sessionId');
+      final response = await http.post(
+        Uri.parse(_n8nSessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
+          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 10));
 
-      final response = await ApiService.getSessionDetails(
-        sessionId: sessionId,
-        phoneNumber: clientData['phone'] ?? '',
-        name: clientData['name'] ?? '',
-        companyName: clientData['companyName'] ?? '',
-      );
-
-      print('DEBUG: Chat title API response: ${response.success} - ${response.message}');
-
-      if (response.success && response.sessionData != null) {
-        final sessionTitle = response.sessionData!.title;
+      print('DEBUG: Chat title API response: ${response.statusCode} - ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> session = jsonDecode(response.body);
+        final sessionTitle = session['session_title']?.toString();
         print('DEBUG: Extracted session title: $sessionTitle');
         print('DEBUG: Current _chatTitle value: $_chatTitle');
         print('DEBUG: Widget mounted: $mounted');
-
-        if (sessionTitle.isNotEmpty) {
+        
+        if (sessionTitle != null && sessionTitle.isNotEmpty) {
           print('DEBUG: Updating chat title to: $sessionTitle');
           if (mounted) {
             setState(() {
@@ -1633,7 +1642,7 @@ class _ChatScreenState extends State<ChatScreen> {
             print('DEBUG: Widget not mounted, skipping setState');
           }
         } else {
-          print('DEBUG: Session title is empty');
+          print('DEBUG: Session title is null or empty');
         }
       }
     } catch (e) {
@@ -1645,27 +1654,40 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<bool> _deleteSessionOnWebhook(String sessionId) async {
     try {
       final clientData = AuthService.getClientData();
-      if (clientData == null) {
-        print('DEBUG: No client data available');
-        return false;
-      }
+      final requestBody = {
+        'method': 'delete',
+        'sessionId': sessionId,
+        'phoneNumber': clientData?['phone'] ?? '',
+        'name': clientData?['name'] ?? '',
+        'companyName': clientData?['companyName'] ?? '',
+      };
+      
+      print('DEBUG: Deleting session with: ${jsonEncode(requestBody)}');
 
-      print('DEBUG: Deleting session: $sessionId');
+      final response = await http.post(
+        Uri.parse(_n8nSessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
+          'X-Session-ID': sessionId,
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 10));
 
-      final response = await ApiService.deleteSession(
-        sessionId: sessionId,
-        phoneNumber: clientData['phone'] ?? '',
-        name: clientData['name'] ?? '',
-        companyName: clientData['companyName'] ?? '',
-      );
-
-      print('DEBUG: Delete session API response: ${response.success} - ${response.message}');
-
-      if (response.success) {
-        print('DEBUG: Session deleted successfully');
-        return true;
+      print('DEBUG: Delete session API response: ${response.statusCode} - ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (responseData['response'] == 'success') {
+          print('DEBUG: Session deleted successfully');
+          return true;
+        } else {
+          print('DEBUG: Unexpected response: $responseData');
+          return false;
+        }
       } else {
-        print('DEBUG: Failed to delete session: ${response.message}');
+        print('DEBUG: Delete session failed with status: ${response.statusCode}');
         return false;
       }
     } catch (e) {
@@ -2520,7 +2542,7 @@ class ChatBubble extends StatelessWidget {
 class TypingIndicator extends StatefulWidget {
   final bool isUploadingFile;
 
-  const TypingIndicator({super.key, this.isUploadingFile = false});
+  const TypingIndicator({super.key, required this.isUploadingFile});
 
   @override
   State<TypingIndicator> createState() => _TypingIndicatorState();

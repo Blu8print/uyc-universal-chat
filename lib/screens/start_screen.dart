@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import '../services/api_service.dart';
@@ -16,6 +18,9 @@ class StartScreen extends StatefulWidget {
 }
 
 class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
+  static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
+  static const String _n8nSessionsUrl = 'https://automation.kwaaijongens.nl/webhook/sessions';
+
   List<SessionData> _sessions = [];
   bool _isLoadingSessions = true;
   bool _isRefreshing = false;
@@ -179,6 +184,50 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
           builder: (context) => const ChatScreen(),
         ),
       );
+    }
+  }
+
+  String _getBasicAuthHeader() {
+    final authBytes = utf8.encode(_basicAuth);
+    return 'Basic ${base64Encode(authBytes)}';
+  }
+
+  Future<bool> _deleteSession(SessionData session) async {
+    try {
+      final user = AuthService.currentUser;
+      final requestBody = {
+        'method': 'delete',
+        'sessionId': session.sessionId,
+        'phoneNumber': user?.phone ?? '',
+        'name': user?.name ?? '',
+        'companyName': user?.companyName ?? '',
+      };
+
+      final response = await http.post(
+        Uri.parse(_n8nSessionsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        // Remove from local list
+        setState(() {
+          _sessions.removeWhere((s) => s.sessionId == session.sessionId);
+        });
+        // Update SessionService cache
+        await SessionService.syncSessionList();
+        return true;
+      } else {
+        print('Failed to delete session: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error deleting session: $e');
+      return false;
     }
   }
 
@@ -569,91 +618,147 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildSessionItem(SessionData session) {
-    return GestureDetector(
-      onTap: () => _openSession(session),
-      child: Stack(
-        children: [
-          Container(
-            margin: const EdgeInsets.only(bottom: 20),
-            padding: const EdgeInsets.only(bottom: 20),
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: Colors.white24,
-                  width: 1,
+    return Dismissible(
+      key: Key(session.sessionId),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFCC0001),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(
+          Icons.delete,
+          color: Colors.white,
+          size: 32,
+        ),
+      ),
+      confirmDismiss: (direction) async {
+        // Show confirmation dialog before deleting
+        return await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Sessie verwijderen'),
+              content: const Text('Weet je zeker dat je deze sessie wilt verwijderen?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Annuleren'),
                 ),
-              ),
-            ),
-            child: Row(
-              children: [
-                // Session thumbnail/icon
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(8),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFCC0001),
                   ),
-                  child: const Icon(
-                    Icons.folder_outlined,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-                
-                const SizedBox(width: 15),
-                
-                // Session content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (session.lastActivity != null)
-                        Text(
-                          'Aangeleverd: ${_formatDate(session.lastActivity!)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.8),
-                          ),
-                        ),
-                      const SizedBox(height: 4),
-                      Text(
-                        session.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Open de aangeleverde input >',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: const Text('Verwijderen'),
                 ),
               ],
+            );
+          },
+        ) ?? false;
+      },
+      onDismissed: (direction) async {
+        final success = await _deleteSession(session);
+        if (!success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Kan sessie niet verwijderen. Probeer het opnieuw.'),
+              backgroundColor: Color(0xFFCC0001),
             ),
-          ),
-          
-          // Hourglass indicator when refreshing
-          if (_isRefreshing)
-            const Positioned(
-              bottom: 24, // Positioned above the border line
-              right: 4,
-              child: Icon(
-                Icons.hourglass_empty,
-                size: 14,
-                color: Colors.white70,
+          );
+          // Refresh the list to restore the item
+          await _refreshSessions();
+        }
+      },
+      child: GestureDetector(
+        onTap: () => _openSession(session),
+        child: Stack(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              padding: const EdgeInsets.only(bottom: 20),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.white24,
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  // Session thumbnail/icon
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.folder_outlined,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+
+                  const SizedBox(width: 15),
+
+                  // Session content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (session.lastActivity != null)
+                          Text(
+                            'Aangeleverd: ${_formatDate(session.lastActivity!)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        const SizedBox(height: 4),
+                        Text(
+                          session.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Open de aangeleverde input >',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-        ],
+
+            // Hourglass indicator when refreshing
+            if (_isRefreshing)
+              const Positioned(
+                bottom: 24, // Positioned above the border line
+                right: 4,
+                child: Icon(
+                  Icons.hourglass_empty,
+                  size: 14,
+                  color: Colors.white70,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
