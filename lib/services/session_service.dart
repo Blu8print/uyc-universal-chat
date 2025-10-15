@@ -29,13 +29,13 @@ class SessionService {
   }
   
   // Start new session with backend sync
-  static Future<String> startNewSession() async {
+  static Future<String> startNewSession({String? chatType}) async {
     _currentSessionId = _generateSessionId();
     await _saveSessionId(_currentSessionId!);
-    
+
     // Try to create session on backend
-    await _createSessionOnBackend(_currentSessionId!);
-    
+    await _createSessionOnBackend(_currentSessionId!, chatType: chatType);
+
     return _currentSessionId!;
   }
   
@@ -70,8 +70,8 @@ class SessionService {
   }
   
   // End current session and start new one
-  static Future<String> resetSession() async {
-    return await startNewSession();
+  static Future<String> resetSession({String? chatType}) async {
+    return await startNewSession(chatType: chatType);
   }
   
   // Clear session data
@@ -87,7 +87,7 @@ class SessionService {
   }
   
   // Create session on backend
-  static Future<void> _createSessionOnBackend(String sessionId) async {
+  static Future<void> _createSessionOnBackend(String sessionId, {String? chatType}) async {
     try {
       final user = await StorageService.getUser();
       if (user != null) {
@@ -96,6 +96,7 @@ class SessionService {
           phoneNumber: user.phoneNumber,
           name: user.name,
           companyName: user.companyName,
+          chatType: chatType,
         );
         
         if (response.success && response.sessionData != null) {

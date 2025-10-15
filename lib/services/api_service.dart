@@ -166,11 +166,25 @@ class ApiService {
     required String phoneNumber,
     required String name,
     required String companyName,
+    String? chatType,
   }) async {
     try {
       final authBytes = utf8.encode(_sessionAuth);
       final authHeader = 'Basic ${base64Encode(authBytes)}';
-      
+
+      final requestBody = {
+        'method': 'create',
+        'sessionId': sessionId,
+        'phoneNumber': phoneNumber,
+        'name': name,
+        'companyName': companyName,
+      };
+
+      // Add chatType if available
+      if (chatType != null) {
+        requestBody['chatType'] = chatType;
+      }
+
       final response = await http.post(
         Uri.parse(_sessionsUrl),
         headers: {
@@ -178,13 +192,7 @@ class ApiService {
           'Accept': 'application/json',
           'Authorization': authHeader,
         },
-        body: jsonEncode({
-          'method': 'create',
-          'sessionId': sessionId,
-          'phoneNumber': phoneNumber,
-          'name': name,
-          'companyName': companyName,
-        }),
+        body: jsonEncode(requestBody),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -200,6 +208,7 @@ class ApiService {
               title: data['title'] ?? 'New Chat',
               description: data['description'] ?? '',
               thumbnail: data['thumbnail'],
+              chatType: data['chat_type'] ?? data['chatType'],
             ),
           );
         } else {
@@ -261,6 +270,7 @@ class ApiService {
             lastActivity: sessionJson['last_modified'] ?? sessionJson['created_at'],
             messageCount: 0, // Not provided by server
             createdAt: sessionJson['created_at'],
+            chatType: sessionJson['chat_type'],
           )).toList();
           
           // Sort sessions by lastActivity (most recent first)
@@ -283,6 +293,7 @@ class ApiService {
             lastActivity: sessionJson['last_modified'] ?? sessionJson['lastActivity'] ?? sessionJson['created_at'],
             messageCount: sessionJson['messageCount'] ?? 0,
             createdAt: sessionJson['created_at'] ?? sessionJson['createdAt'],
+            chatType: sessionJson['chat_type'] ?? sessionJson['chatType'],
           )).toList();
           
           // Sort sessions by lastActivity (most recent first)
@@ -366,6 +377,7 @@ class ApiService {
               lastActivity: responseData['last_modified'] ?? responseData['created_at'],
               messageCount: 0,
               createdAt: responseData['created_at'],
+              chatType: responseData['chat_type'],
             ),
           );
         }
@@ -383,6 +395,7 @@ class ApiService {
               lastActivity: data['last_modified'] ?? data['lastActivity'] ?? data['created_at'],
               messageCount: data['messageCount'] ?? 0,
               createdAt: data['created_at'] ?? data['createdAt'],
+              chatType: data['chat_type'] ?? data['chatType'],
             ),
           );
         } else {
@@ -496,6 +509,7 @@ class ApiService {
               lastActivity: responseData['last_modified'] ?? responseData['created_at'],
               messageCount: 0, // Not provided by server
               createdAt: responseData['created_at'],
+              chatType: responseData['chat_type'],
             ),
           );
         }
@@ -513,6 +527,7 @@ class ApiService {
               lastActivity: data['last_modified'] ?? data['lastActivity'] ?? data['created_at'],
               messageCount: data['messageCount'] ?? 0,
               createdAt: data['created_at'] ?? data['createdAt'],
+              chatType: data['chat_type'] ?? data['chatType'],
             ),
           );
         } else {
@@ -614,6 +629,7 @@ class SessionData {
   final String? lastActivity;
   final int messageCount;
   final String? createdAt;
+  final String? chatType;
 
   SessionData({
     required this.sessionId,
@@ -623,6 +639,7 @@ class SessionData {
     this.lastActivity,
     this.messageCount = 0,
     this.createdAt,
+    this.chatType,
   });
 
   Map<String, dynamic> toJson() {
@@ -634,6 +651,7 @@ class SessionData {
       'lastActivity': lastActivity,
       'messageCount': messageCount,
       'createdAt': createdAt,
+      'chatType': chatType,
     };
   }
 
@@ -646,6 +664,7 @@ class SessionData {
       lastActivity: json['lastActivity'],
       messageCount: json['messageCount'] ?? 0,
       createdAt: json['createdAt'],
+      chatType: json['chatType'],
     );
   }
 }

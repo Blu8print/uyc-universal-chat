@@ -1150,17 +1150,20 @@ class _ChatScreenState extends State<ChatScreen> {
     // Send the last (newest) text message to get a bot response
     final lastMessage = textMessages.last;
 
-    final requestBody = {
+    // Build request body with correct field order
+    final requestBody = <String, dynamic>{
       'action': 'sendMessage',
-      'sessionId': SessionService.currentSessionId ?? 'no-session',
-      'chatInput': lastMessage.text,
-      'clientData': AuthService.getClientData(),
     };
 
-    // Add chatType if available
+    // Add chatType right after action if available
     if (_chatType != null) {
       requestBody['chatType'] = _chatType!;
     }
+
+    // Add remaining fields
+    requestBody['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    requestBody['chatInput'] = lastMessage.text;
+    requestBody['clientData'] = AuthService.getClientData();
 
     final response = await http.post(
       Uri.parse(_n8nChatUrl),
@@ -1639,6 +1642,11 @@ class _ChatScreenState extends State<ChatScreen> {
         'name': clientData?['name'] ?? '',
         'company': clientData?['companyName'] ?? '',
       };
+
+      // Add chatType if available
+      if (_chatType != null) {
+        requestBody['chatType'] = _chatType!;
+      }
       
       print('DEBUG: Fetching chat title with: ${jsonEncode(requestBody)}');
 
@@ -1692,7 +1700,12 @@ class _ChatScreenState extends State<ChatScreen> {
         'name': clientData?['name'] ?? '',
         'companyName': clientData?['companyName'] ?? '',
       };
-      
+
+      // Add chatType if available
+      if (_chatType != null) {
+        requestBody['chatType'] = _chatType!;
+      }
+
       print('DEBUG: Deleting session with: ${jsonEncode(requestBody)}');
 
       final response = await http.post(

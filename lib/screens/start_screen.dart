@@ -165,9 +165,23 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _navigateToAction(String actionType) async {
-    // Always start a new session for action buttons
-    await SessionService.resetSession();
-    
+    // Map actionType to chatType
+    String? chatType;
+    switch (actionType) {
+      case 'project':
+        chatType = 'project_doorgeven';
+        break;
+      case 'knowledge':
+        chatType = 'vakkennis_delen';
+        break;
+      case 'social':
+        chatType = 'social_media';
+        break;
+    }
+
+    // Always start a new session for action buttons with the chatType
+    await SessionService.resetSession(chatType: chatType);
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ChatScreen(actionContext: actionType),
@@ -202,6 +216,11 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
         'name': user?.name ?? '',
         'companyName': user?.companyName ?? '',
       };
+
+      // Add chatType if available
+      if (session.chatType != null) {
+        requestBody['chatType'] = session.chatType!;
+      }
 
       final response = await http.post(
         Uri.parse(_n8nSessionsUrl),
