@@ -184,19 +184,26 @@ class _ChatScreenState extends State<ChatScreen> {
     final user = AuthService.currentUser;
     final userName = user?.name ?? 'daar';
     final companyName = user?.companyName ?? 'je bedrijf';
-    
+
     // Load existing messages for current session
     final sessionId = SessionService.currentSessionId;
     if (sessionId != null) {
       final savedMessages = await StorageService.loadMessages(sessionId);
-      
+
       if (savedMessages.isNotEmpty) {
         // Load existing messages
         final messages = savedMessages
             .map((json) => ChatMessage.fromJson(json))
             .where((msg) => _isFileStillValid(msg)) // Filter out messages with missing files
             .toList();
-        
+
+        // Load chatType from SessionData if available
+        final sessionData = SessionService.currentSessionData;
+        if (sessionData != null && sessionData.chatType != null) {
+          _chatType = sessionData.chatType;
+          print('DEBUG: Loaded chatType from SessionData: $_chatType');
+        }
+
         setState(() {
           _messages.addAll(messages);
         });
@@ -204,7 +211,7 @@ class _ChatScreenState extends State<ChatScreen> {
         return;
       }
     }
-    
+
     // No existing messages - add welcome message
     await _addMessage(ChatMessage(
       text: "Hallo $userName! Ik ben je AI-assistent van Kwaaijongens. Ik help $companyName graag met blog ideeën en content creatie. Waar kan ik je mee helpen?",
@@ -1666,17 +1673,25 @@ class _ChatScreenState extends State<ChatScreen> {
       if (response.statusCode == 200) {
         final Map<String, dynamic> session = jsonDecode(response.body);
         final sessionTitle = session['session_title']?.toString();
+        final sessionChatType = session['chatType']?.toString() ?? session['chat_type']?.toString();
         print('DEBUG: Extracted session title: $sessionTitle');
+        print('DEBUG: Extracted chatType: $sessionChatType');
         print('DEBUG: Current _chatTitle value: $_chatTitle');
+        print('DEBUG: Current _chatType value: $_chatType');
         print('DEBUG: Widget mounted: $mounted');
-        
+
         if (sessionTitle != null && sessionTitle.isNotEmpty) {
           print('DEBUG: Updating chat title to: $sessionTitle');
           if (mounted) {
             setState(() {
               _chatTitle = sessionTitle;
+              // Update chatType if available from response
+              if (sessionChatType != null && sessionChatType.isNotEmpty) {
+                _chatType = sessionChatType;
+                print('DEBUG: Updated _chatType to: $_chatType');
+              }
             });
-            print('DEBUG: setState completed, new _chatTitle: $_chatTitle');
+            print('DEBUG: setState completed, new _chatTitle: $_chatTitle, new _chatType: $_chatType');
           } else {
             print('DEBUG: Widget not mounted, skipping setState');
           }
