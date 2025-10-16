@@ -38,6 +38,7 @@ xcodebuild \
     -workspace Runner.xcworkspace \
     -scheme Runner \
     -configuration Release \
+    -destination 'generic/platform=iOS' \
     -archivePath build/Runner.xcarchive \
     -allowProvisioningUpdates \
     archive
