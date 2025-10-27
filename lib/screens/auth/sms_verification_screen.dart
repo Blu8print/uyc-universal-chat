@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth_service.dart';
-import '../../screens/chat_screen.dart';
+import '../start_screen.dart';
 
 class SmsVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -61,10 +61,10 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
       });
 
       if (response.success) {
-        // Registration successful - navigate to chat
+        // Registration successful - navigate to start screen
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (context) => const ChatScreen()),
+          MaterialPageRoute(builder: (context) => const StartScreen()),
           (route) => false,
         );
       } else {

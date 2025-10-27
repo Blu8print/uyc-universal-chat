@@ -20,6 +20,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:light_compressor/light_compressor.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -50,7 +52,7 @@ class MyApp extends StatelessWidget {
 
 class ChatScreen extends StatefulWidget {
   final String? actionContext;
-  
+
   const ChatScreen({super.key, this.actionContext});
 
   @override
@@ -63,7 +65,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final AudioRecordingService _audioService = AudioRecordingService();
   final ImagePicker _imagePicker = ImagePicker();
   Timer? _recordingTimer;
-  
+
   bool _isTyping = false;
   bool _isLoading = false;
   bool _isUploadingFile = false;
@@ -76,13 +78,23 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _bannerTimer;
   String _chatTitle = 'Chat';
   String? _chatType;
+  bool _audioEnabled = false;
+  AudioPlayer? _audioPlayer;
 
-  final String _n8nChatUrl = 'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
-  final String _n8nImageUrl = 'https://automation.kwaaijongens.nl/webhook/media_image';
-  final String _n8nDocumentUrl = 'https://automation.kwaaijongens.nl/webhook/media_document';
-  final String _n8nVideoUrl = 'https://automation.kwaaijongens.nl/webhook/media_video';
-  final String _n8nEmailUrl = 'https://automation.kwaaijongens.nl/webhook/send-email';
-  final String _n8nSessionsUrl = 'https://automation.kwaaijongens.nl/webhook/sessions';
+  final String _n8nChatUrl =
+      'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
+  final String _n8nImageUrl =
+      'https://automation.kwaaijongens.nl/webhook/media_image';
+  final String _n8nDocumentUrl =
+      'https://automation.kwaaijongens.nl/webhook/media_document';
+  final String _n8nVideoUrl =
+      'https://automation.kwaaijongens.nl/webhook/media_video';
+  final String _n8nEmailUrl =
+      'https://automation.kwaaijongens.nl/webhook/send-email';
+  final String _n8nSessionsUrl =
+      'https://automation.kwaaijongens.nl/webhook/sessions';
+  final String _n8nAudioUrl =
+      'https://automation.kwaaijongens.nl/webhook/generate_audio';
 
   // Basic Auth credentials
   static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
@@ -98,36 +110,43 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    _audioPlayer = AudioPlayer();
     _initializeApp();
   }
-  
+
   Future<void> _handleActionContext() async {
     if (widget.actionContext != null) {
       String contextMessage = '';
       switch (widget.actionContext) {
         case 'project':
-          contextMessage = 'Ik wil een project doorgeven. ';
+          contextMessage = 'ik wil een project doorgeven';
           _chatType = 'project_doorgeven';
           break;
         case 'knowledge':
-          contextMessage = 'Ik wil mijn vakkennis delen voor een blog. ';
+          contextMessage = 'ik wil vakkennis delen';
           _chatType = 'vakkennis_delen';
           break;
         case 'social':
-          contextMessage = 'Ik wil content maken voor social media. ';
+          contextMessage = 'Ik wil content maken voor social media';
           _chatType = 'social_media';
           break;
       }
 
       if (contextMessage.isNotEmpty) {
-        // Add context message as first user message
+        // Create message with pending status
         final contextChatMessage = ChatMessage(
           text: contextMessage,
           isCustomer: true,
           timestamp: DateTime.now(),
+          status: MessageStatus.pending,
         );
 
+        // Add message to UI
         await _addMessage(contextChatMessage);
+        _scrollToBottom();
+
+        // Send message to backend
+        await _sendBulkMessages(contextChatMessage);
       }
     }
   }
@@ -136,10 +155,10 @@ class _ChatScreenState extends State<ChatScreen> {
     await _initializeServices();
     await _initializeWelcomeMessage();
     _requestInitialPermissions();
-    
+
     // Handle action context after welcome message
     await _handleActionContext();
-    
+
     // Fetch chat title after everything is initialized
     if (mounted) {
       _fetchChatTitle();
@@ -154,10 +173,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _initializeFirebaseMessaging() async {
     try {
       await FirebaseMessagingService.initialize();
-      
+
       // Set message handler for foreground notifications
       FirebaseMessagingService.setMessageHandler(_handleFCMMessage);
-      
+
       // Register FCM token with n8n backend
       final tokenData = FirebaseMessagingService.getTokenData();
       if (tokenData != null) {
@@ -181,10 +200,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _initializeWelcomeMessage() async {
-    final user = AuthService.currentUser;
-    final userName = user?.name ?? 'daar';
-    final companyName = user?.companyName ?? 'je bedrijf';
-
     // Load existing messages for current session
     final sessionId = SessionService.currentSessionId;
     if (sessionId != null) {
@@ -192,10 +207,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (savedMessages.isNotEmpty) {
         // Load existing messages
-        final messages = savedMessages
-            .map((json) => ChatMessage.fromJson(json))
-            .where((msg) => _isFileStillValid(msg)) // Filter out messages with missing files
-            .toList();
+        final messages =
+            savedMessages
+                .map((json) => ChatMessage.fromJson(json))
+                .where(
+                  (msg) => _isFileStillValid(msg),
+                ) // Filter out messages with missing files
+                .toList();
 
         // Load chatType from SessionData if available
         final sessionData = SessionService.currentSessionData;
@@ -208,17 +226,18 @@ class _ChatScreenState extends State<ChatScreen> {
           _messages.addAll(messages);
         });
         _scrollToBottom();
+
+        // Show send to team banner for existing chats with messages
+        if (messages.isNotEmpty) {
+          _displaySendToTeamBanner();
+        }
+
         return;
       }
     }
 
-    // No existing messages - add welcome message
-    await _addMessage(ChatMessage(
-      text: "Hallo $userName! Ik ben je AI-assistent van Kwaaijongens. Ik help $companyName graag met blog ideeën en content creatie. Waar kan ik je mee helpen?",
-      isCustomer: false,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
-      status: MessageStatus.sent,
-    ));
+    // No existing messages - no welcome message needed
+    // The action context will handle sending the initial message
   }
 
   // Check if message files still exist
@@ -241,7 +260,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (sessionId != null) {
       final messagesJson = _messages.map((msg) => msg.toJson()).toList();
       await StorageService.saveMessages(sessionId, messagesJson);
-      
+
       // Update session metadata after sending messages
       if (_messages.isNotEmpty) {
         await SessionService.updateCurrentSession();
@@ -261,11 +280,16 @@ class _ChatScreenState extends State<ChatScreen> {
   void _handleFCMMessage(Map<String, dynamic> messageData) {
     try {
       // Extract message content from FCM data
-      final String? messageText = messageData['message'] ?? messageData['body'] ?? messageData['content'];
+      final String? messageText =
+          messageData['message'] ??
+          messageData['body'] ??
+          messageData['content'];
       final String? sessionId = messageData['sessionId'];
-      
+
       // Only process messages for current session
-      if (sessionId != null && sessionId == SessionService.currentSessionId && messageText != null) {
+      if (sessionId != null &&
+          sessionId == SessionService.currentSessionId &&
+          messageText != null) {
         final fcmMessage = ChatMessage(
           text: messageText,
           isCustomer: false, // FCM messages are from the bot/system
@@ -273,7 +297,7 @@ class _ChatScreenState extends State<ChatScreen> {
           status: MessageStatus.sent,
           fromFCM: true, // Mark this message as coming from FCM
         );
-        
+
         _addMessage(fcmMessage);
         _scrollToBottom();
       }
@@ -287,6 +311,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _audioService.dispose();
+    _audioPlayer?.dispose();
     _recordingTimer?.cancel();
     _bannerTimer?.cancel();
     super.dispose();
@@ -310,10 +335,10 @@ class _ChatScreenState extends State<ChatScreen> {
       _bannerAvailable = false;
       _showSendToTeamBanner = false;
     });
-    
+
     if (_messageController.text.trim().isNotEmpty && !_isLoading) {
       final userMessage = _messageController.text.trim();
-      
+
       // Create new message with pending status
       final newMessage = ChatMessage(
         text: userMessage,
@@ -321,16 +346,16 @@ class _ChatScreenState extends State<ChatScreen> {
         timestamp: DateTime.now(),
         status: MessageStatus.pending, // Start as pending
       );
-      
+
       // Add user message immediately
       await _addMessage(newMessage);
-      
+
       _messageController.clear();
       setState(() {
         _isTyping = false;
       });
       _scrollToBottom();
-      
+
       // Send in bulk with all pending messages
       await _sendBulkMessages(newMessage);
     }
@@ -338,37 +363,44 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendToN8n(String message) async {
     try {
-      final response = await http.post(
-        Uri.parse(_n8nChatUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-        },
-        body: jsonEncode({
-          'action': 'sendMessage',
-          'sessionId': SessionService.currentSessionId ?? 'no-session',
-          'chatInput': message,
-          'clientData': AuthService.getClientData(),
-        }),
-      ).timeout(const Duration(seconds: 30));
-      
+      final response = await http
+          .post(
+            Uri.parse(_n8nChatUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': _getBasicAuthHeader(),
+              'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+            },
+            body: jsonEncode({
+              'action': 'sendMessage',
+              'sessionId': SessionService.currentSessionId ?? 'no-session',
+              'chatInput': message,
+              'clientData': AuthService.getClientData(),
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
       // Log response details for debugging
-      
+
       if (response.statusCode == 200) {
-        String botResponse = _parseWebhookResponse(response.body, 'Geen reactie ontvangen');
-        
+        String botResponse = _parseWebhookResponse(
+          response.body,
+          'Geen reactie ontvangen',
+        );
+
         // Add bot response
-        await _addMessage(ChatMessage(
-          text: botResponse,
-          isCustomer: false,
-          timestamp: DateTime.now(),
-        ));
-        
+        await _addMessage(
+          ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+          ),
+        );
+
         // Show send to team banner after AI response
         _displaySendToTeamBanner();
-        
+
         // Fetch updated chat title
         _fetchChatTitle();
       } else {
@@ -376,17 +408,86 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       // Error sending to n8n: $e
-      await _addErrorMessage('Sorry, er ging iets mis. Controleer je internetverbinding en probeer het opnieuw.');
+      await _addErrorMessage(
+        'Sorry, er ging iets mis. Controleer je internetverbinding en probeer het opnieuw.',
+      );
     }
   }
 
   Future<void> _addErrorMessage(String errorText) async {
-    await _addMessage(ChatMessage(
-      text: errorText,
-      isCustomer: false,
-      timestamp: DateTime.now(),
-      status: MessageStatus.sent,
-    ));
+    await _addMessage(
+      ChatMessage(
+        text: errorText,
+        isCustomer: false,
+        timestamp: DateTime.now(),
+        status: MessageStatus.sent,
+      ),
+    );
+  }
+
+  Future<void> _generateAndPlayAudio() async {
+    if (!_audioEnabled) return;
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse(_n8nAudioUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': _getBasicAuthHeader(),
+            },
+            body: jsonEncode({
+              'sessionId': SessionService.currentSessionId ?? 'no-session',
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        // Debug logging
+        print('Audio response headers: ${response.headers}');
+        print(
+          'Audio response content-type: ${response.headers['content-type']}',
+        );
+        print('Audio response body length: ${response.bodyBytes.length}');
+        print(
+          'Audio response first 100 bytes: ${response.bodyBytes.take(100).toList()}',
+        );
+
+        // Save MP3 to temp file
+        final tempDir = await getTemporaryDirectory();
+        final audioFile = File(
+          '${tempDir.path}/response_${DateTime.now().millisecondsSinceEpoch}.mp3',
+        );
+        await audioFile.writeAsBytes(response.bodyBytes);
+
+        // Verify file was written
+        final fileExists = await audioFile.exists();
+        final fileSize = await audioFile.length();
+        print(
+          'Audio file saved: $fileExists, size: $fileSize bytes, path: ${audioFile.path}',
+        );
+
+        // Add audio message with autoPlay flag
+        await _addMessage(
+          ChatMessage(
+            text: '🔊 Audio reactie',
+            isCustomer: false,
+            timestamp: DateTime.now(),
+            audioFile: audioFile,
+            attachmentType: AttachmentType.audio,
+            status: MessageStatus.sent,
+            autoPlay: true,
+          ),
+        );
+
+        print('Audio message added with autoPlay: true');
+      } else {
+        print('Audio generation failed with status: ${response.statusCode}');
+      }
+    } catch (e, stackTrace) {
+      print('Error generating audio: $e');
+      print('Stack trace: $stackTrace');
+    }
   }
 
   Future<void> _startRecording() async {
@@ -394,31 +495,33 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _showSendToTeamBanner = false;
     });
-    
+
     print('DEBUG: Starting recording...');
     final hasPermission = await _audioService.requestPermission();
     print('DEBUG: Recording permission granted: $hasPermission');
-    
+
     if (!hasPermission) {
       print('DEBUG: Permission denied, showing snackbar');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Microfoon toegang is vereist voor audio opnamen. Ga naar instellingen om dit toe te staan.'),
+            content: Text(
+              'Microfoon toegang is vereist voor audio opnamen. Ga naar instellingen om dit toe te staan.',
+            ),
             duration: Duration(seconds: 4),
           ),
         );
       }
       return;
     }
-    
+
     final success = await _audioService.startRecording();
     if (success) {
       setState(() {
         _isRecording = true;
         _recordingDuration = Duration.zero;
       });
-      
+
       _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         setState(() {
           _recordingDuration = Duration(seconds: timer.tick);
@@ -428,7 +531,9 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Kan opname niet starten. Controleer microfoon toegang.'),
+            content: Text(
+              'Kan opname niet starten. Controleer microfoon toegang.',
+            ),
           ),
         );
       }
@@ -437,20 +542,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _stopRecording() async {
     _recordingTimer?.cancel();
-    
+
     final audioFile = await _audioService.stopRecording();
-    
+
     setState(() {
       _isRecording = false;
       _recordingDuration = Duration.zero;
     });
-    
+
     if (audioFile != null) {
       await _sendAudioMessage(audioFile);
     } else {
       // Recording cancelled - show banner again if available and text field empty
       setState(() {
-        _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+        _showSendToTeamBanner =
+            _bannerAvailable && _messageController.text.trim().isEmpty;
       });
     }
   }
@@ -461,7 +567,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _bannerAvailable = false;
       _showSendToTeamBanner = false;
     });
-    
+
     // Create new audio message with pending status
     final newMessage = ChatMessage(
       text: '🎤 Audio bericht (${_formatDuration(_recordingDuration)})',
@@ -492,7 +598,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (responseBody.isEmpty) {
       return defaultMessage;
     }
-    
+
     // Check if response contains HTML iframe with srcdoc attribute
     if (responseBody.contains('<iframe') && responseBody.contains('srcdoc=')) {
       final RegExp iframeRegex = RegExp(r'srcdoc="([^"]*)"');
@@ -501,17 +607,17 @@ class _ChatScreenState extends State<ChatScreen> {
         return match.group(1)!;
       }
     }
-    
+
     try {
       final data = jsonDecode(responseBody);
       if (data is Map) {
-        return data['output'] ?? 
-               data['response'] ?? 
-               data['message'] ?? 
-               data['reply'] ?? 
-               data['text'] ??
-               data['analysis'] ??
-               defaultMessage;
+        return data['output'] ??
+            data['response'] ??
+            data['message'] ??
+            data['reply'] ??
+            data['text'] ??
+            data['analysis'] ??
+            defaultMessage;
       } else if (data is String) {
         return data;
       } else {
@@ -525,7 +631,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Map<String, String> _getFileExtensionAndMimeType(String filePath) {
     final extension = filePath.split('.').last.toLowerCase();
-    
+
     switch (extension) {
       case 'jpg':
       case 'jpeg':
@@ -554,14 +660,14 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               const Text(
                 'Bijlage selecteren',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.description, color: Color(0xFFCC0001)),
+                leading: const Icon(
+                  Icons.description,
+                  color: Color(0xFFCC0001),
+                ),
                 title: const Text('Document'),
                 subtitle: const Text('PDF, Word, Excel, PowerPoint, ODT'),
                 onTap: () {
@@ -570,7 +676,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library, color: Color(0xFFCC0001)),
+                leading: const Icon(
+                  Icons.photo_library,
+                  color: Color(0xFFCC0001),
+                ),
                 title: const Text('Galerij'),
                 subtitle: const Text('Meerdere foto\'s en afbeeldingen'),
                 onTap: () {
@@ -601,10 +710,7 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               const Text(
                 'Media selecteren',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               ListTile(
@@ -624,7 +730,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library, color: Color(0xFFCC0001)),
+                leading: const Icon(
+                  Icons.photo_library,
+                  color: Color(0xFFCC0001),
+                ),
                 title: const Text('Foto kiezen'),
                 onTap: () {
                   Navigator.pop(context);
@@ -632,7 +741,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.video_library, color: Color(0xFFCC0001)),
+                leading: const Icon(
+                  Icons.video_library,
+                  color: Color(0xFFCC0001),
+                ),
                 title: const Text('Video kiezen'),
                 onTap: () {
                   Navigator.pop(context);
@@ -656,7 +768,7 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _showSendToTeamBanner = false;
     });
-    
+
     try {
       // Request permissions
       if (source == ImageSource.camera) {
@@ -677,7 +789,9 @@ class _ChatScreenState extends State<ChatScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Galerij toegang is vereist om foto\'s te selecteren.'),
+                content: Text(
+                  'Galerij toegang is vereist om foto\'s te selecteren.',
+                ),
               ),
             );
           }
@@ -698,20 +812,20 @@ class _ChatScreenState extends State<ChatScreen> {
       } else {
         // Image picking cancelled - show banner again if available and text field empty
         setState(() {
-          _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+          _showSendToTeamBanner =
+              _bannerAvailable && _messageController.text.trim().isEmpty;
         });
       }
     } catch (e) {
       // Error occurred - show banner again if available and text field empty
       setState(() {
-        _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+        _showSendToTeamBanner =
+            _bannerAvailable && _messageController.text.trim().isEmpty;
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fout bij het selecteren van afbeelding: $e'),
-          ),
+          SnackBar(content: Text('Fout bij het selecteren van afbeelding: $e')),
         );
       }
     }
@@ -731,7 +845,9 @@ class _ChatScreenState extends State<ChatScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Camera toegang is vereist om video\'s te maken.'),
+                content: Text(
+                  'Camera toegang is vereist om video\'s te maken.',
+                ),
               ),
             );
           }
@@ -743,7 +859,9 @@ class _ChatScreenState extends State<ChatScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Galerij toegang is vereist om video\'s te selecteren.'),
+                content: Text(
+                  'Galerij toegang is vereist om video\'s te selecteren.',
+                ),
               ),
             );
           }
@@ -762,20 +880,20 @@ class _ChatScreenState extends State<ChatScreen> {
       } else {
         // Video picking cancelled - show banner again if available and text field empty
         setState(() {
-          _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+          _showSendToTeamBanner =
+              _bannerAvailable && _messageController.text.trim().isEmpty;
         });
       }
     } catch (e) {
       // Error occurred - show banner again if available and text field empty
       setState(() {
-        _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+        _showSendToTeamBanner =
+            _bannerAvailable && _messageController.text.trim().isEmpty;
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fout bij het selecteren van video: $e'),
-          ),
+          SnackBar(content: Text('Fout bij het selecteren van video: $e')),
         );
       }
     }
@@ -789,7 +907,9 @@ class _ChatScreenState extends State<ChatScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Galerij toegang is vereist om foto\'s te selecteren.'),
+              content: Text(
+                'Galerij toegang is vereist om foto\'s te selecteren.',
+              ),
             ),
           );
         }
@@ -805,7 +925,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (images.isNotEmpty) {
         // Limit to maximum 10 images
         final limitedImages = images.take(10).toList();
-        final imageFiles = limitedImages.map((xFile) => File(xFile.path)).toList();
+        final imageFiles =
+            limitedImages.map((xFile) => File(xFile.path)).toList();
         await _sendMultipleImages(imageFiles);
       }
     } catch (e) {
@@ -822,22 +943,25 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _sendMultipleImages(List<File> imageFiles) async {
     for (int i = 0; i < imageFiles.length; i++) {
       final imageFile = imageFiles[i];
-      
+
       // Add progress message
       if (imageFiles.length > 1) {
         setState(() {
-          _messages.add(ChatMessage(
-            text: 'Afbeelding ${i + 1} van ${imageFiles.length} wordt verzonden...',
-            isCustomer: false,
-            timestamp: DateTime.now(),
-          ));
+          _messages.add(
+            ChatMessage(
+              text:
+                  'Afbeelding ${i + 1} van ${imageFiles.length} wordt verzonden...',
+              isCustomer: false,
+              timestamp: DateTime.now(),
+            ),
+          );
         });
         _scrollToBottom();
       }
-      
+
       // Send individual image
       await _sendImageMessage(imageFile);
-      
+
       // Small delay between uploads to avoid overwhelming the server
       if (i < imageFiles.length - 1) {
         await Future.delayed(const Duration(milliseconds: 500));
@@ -851,7 +975,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _bannerAvailable = false;
       _showSendToTeamBanner = false;
     });
-    
+
     // Create new image message with pending status
     final newMessage = ChatMessage(
       text: '📷 Afbeelding',
@@ -911,13 +1035,11 @@ class _ChatScreenState extends State<ChatScreen> {
         path: videoFile.path,
         videoQuality: VideoQuality.medium,
         isMinBitrateCheckEnabled: false,
-        video: Video(videoName: 'compressed_${DateTime.now().millisecondsSinceEpoch}'),
-        android: AndroidConfig(
-          isSharedStorage: false,
+        video: Video(
+          videoName: 'compressed_${DateTime.now().millisecondsSinceEpoch}',
         ),
-        ios: IOSConfig(
-          saveInGallery: false,
-        ),
+        android: AndroidConfig(isSharedStorage: false),
+        ios: IOSConfig(saveInGallery: false),
       );
 
       // Remove compressing message
@@ -943,7 +1065,9 @@ class _ChatScreenState extends State<ChatScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Compressie mislukt: ${result.message}. Originele video wordt verzonden.'),
+              content: Text(
+                'Compressie mislukt: ${result.message}. Originele video wordt verzonden.',
+              ),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 3),
             ),
@@ -971,7 +1095,9 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Compressie fout: $e. Originele video wordt verzonden.'),
+            content: Text(
+              'Compressie fout: $e. Originele video wordt verzonden.',
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -1001,7 +1127,7 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _showSendToTeamBanner = false;
     });
-    
+
     try {
       final documentFile = await AttachmentService.pickDocument();
       if (documentFile != null) {
@@ -1009,20 +1135,20 @@ class _ChatScreenState extends State<ChatScreen> {
       } else {
         // Document picking cancelled - show banner again if available and text field empty
         setState(() {
-          _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+          _showSendToTeamBanner =
+              _bannerAvailable && _messageController.text.trim().isEmpty;
         });
       }
     } catch (e) {
       // Error occurred - show banner again if available and text field empty
       setState(() {
-        _showSendToTeamBanner = _bannerAvailable && _messageController.text.trim().isEmpty;
+        _showSendToTeamBanner =
+            _bannerAvailable && _messageController.text.trim().isEmpty;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fout bij het selecteren van document: $e'),
-          ),
+          SnackBar(content: Text('Fout bij het selecteren van document: $e')),
         );
       }
     }
@@ -1034,9 +1160,9 @@ class _ChatScreenState extends State<ChatScreen> {
       _bannerAvailable = false;
       _showSendToTeamBanner = false;
     });
-    
+
     final fileInfo = AttachmentService.getFileInfo(documentFile);
-    
+
     // Create new document message with pending status
     final newMessage = ChatMessage(
       text: '📄 ${fileInfo['fileName']}',
@@ -1055,12 +1181,11 @@ class _ChatScreenState extends State<ChatScreen> {
     await _sendBulkMessages(newMessage);
   }
 
-
   void _onTextChanged(String text) {
     setState(() {
       _isTyping = text.trim().isNotEmpty;
     });
-    
+
     // Show/hide banner based on text field state
     if (text.trim().isEmpty && _bannerAvailable) {
       setState(() {
@@ -1113,12 +1238,14 @@ class _ChatScreenState extends State<ChatScreen> {
       List<ChatMessage> allMessagesToSend = _getPendingMessages();
 
       // Separate text messages from file messages
-      List<ChatMessage> textMessages = allMessagesToSend
-          .where((msg) => msg.attachmentType == AttachmentType.none)
-          .toList();
-      List<ChatMessage> fileMessages = allMessagesToSend
-          .where((msg) => msg.attachmentType != AttachmentType.none)
-          .toList();
+      List<ChatMessage> textMessages =
+          allMessagesToSend
+              .where((msg) => msg.attachmentType == AttachmentType.none)
+              .toList();
+      List<ChatMessage> fileMessages =
+          allMessagesToSend
+              .where((msg) => msg.attachmentType != AttachmentType.none)
+              .toList();
 
       setState(() {
         _isLoading = true;
@@ -1137,10 +1264,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // Mark all messages as sent after successful bulk operation
       _markMessagesAsSent(allMessagesToSend);
-
     } catch (e) {
       print('Bulk send failed: $e');
-      _addErrorMessage('Sorry, er ging iets mis bij het versturen van berichten.');
+      _addErrorMessage(
+        'Sorry, er ging iets mis bij het versturen van berichten.',
+      );
     } finally {
       setState(() {
         _isLoading = false;
@@ -1158,9 +1286,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final lastMessage = textMessages.last;
 
     // Build request body with correct field order
-    final requestBody = <String, dynamic>{
-      'action': 'sendMessage',
-    };
+    final requestBody = <String, dynamic>{'action': 'sendMessage'};
 
     // Add chatType right after action if available
     if (_chatType != null) {
@@ -1172,32 +1298,42 @@ class _ChatScreenState extends State<ChatScreen> {
     requestBody['chatInput'] = lastMessage.text;
     requestBody['clientData'] = AuthService.getClientData();
 
-    final response = await http.post(
-      Uri.parse(_n8nChatUrl),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': _getBasicAuthHeader(),
-        'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-      },
-      body: jsonEncode(requestBody),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          Uri.parse(_n8nChatUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': _getBasicAuthHeader(),
+            'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+          },
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 200) {
-      String botResponse = _parseWebhookResponse(response.body, 'Bericht ontvangen en verwerkt');
+      String botResponse = _parseWebhookResponse(
+        response.body,
+        'Bericht ontvangen en verwerkt',
+      );
 
       setState(() {
-        _messages.add(ChatMessage(
-          text: botResponse,
-          isCustomer: false,
-          timestamp: DateTime.now(),
-          status: MessageStatus.sent,
-        ));
+        _messages.add(
+          ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+            status: MessageStatus.sent,
+          ),
+        );
       });
-      
+
+      // Generate and play audio if enabled
+      await _generateAndPlayAudio();
+
       // Show send to team banner after AI response
       _displaySendToTeamBanner();
-      
+
       // Fetch updated chat title
       _fetchChatTitle();
     } else {
@@ -1207,28 +1343,31 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send individual file message
   Future<void> _sendIndividualFileMessage(ChatMessage fileMessage) async {
-    if (fileMessage.attachmentType == AttachmentType.image && fileMessage.imageFile != null) {
+    if (fileMessage.attachmentType == AttachmentType.image &&
+        fileMessage.imageFile != null) {
       await _sendImageFileMessage(fileMessage);
-    } else if (fileMessage.attachmentType == AttachmentType.audio && fileMessage.audioFile != null) {
+    } else if (fileMessage.attachmentType == AttachmentType.audio &&
+        fileMessage.audioFile != null) {
       await _sendAudioFileMessage(fileMessage);
-    } else if (fileMessage.attachmentType == AttachmentType.document && fileMessage.documentFile != null) {
+    } else if (fileMessage.attachmentType == AttachmentType.document &&
+        fileMessage.documentFile != null) {
       await _sendDocumentFileMessage(fileMessage);
-    } else if (fileMessage.attachmentType == AttachmentType.video && fileMessage.videoFile != null) {
+    } else if (fileMessage.attachmentType == AttachmentType.video &&
+        fileMessage.videoFile != null) {
       await _sendVideoFileMessage(fileMessage);
     }
   }
 
   // Send image file message
   Future<void> _sendImageFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest(
-      'POST',
-      Uri.parse(_n8nImageUrl),
-    );
+    var request = http.MultipartRequest('POST', Uri.parse(_n8nImageUrl));
 
     request.fields['action'] = 'sendImage';
-    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.fields['sessionId'] =
+        SessionService.currentSessionId ?? 'no-session';
     request.headers['Authorization'] = _getBasicAuthHeader();
-    request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['X-Session-ID'] =
+        SessionService.currentSessionId ?? 'no-session';
 
     // Add chatType if available
     if (_chatType != null) {
@@ -1252,20 +1391,25 @@ class _ChatScreenState extends State<ChatScreen> {
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      String botResponse = _parseWebhookResponse(response.body, 'Afbeelding ontvangen en geanalyseerd');
+      String botResponse = _parseWebhookResponse(
+        response.body,
+        'Afbeelding ontvangen en geanalyseerd',
+      );
 
       setState(() {
-        _messages.add(ChatMessage(
-          text: botResponse,
-          isCustomer: false,
-          timestamp: DateTime.now(),
-          status: MessageStatus.sent,
-        ));
+        _messages.add(
+          ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+            status: MessageStatus.sent,
+          ),
+        );
       });
-      
+
       // Show send to team banner after AI response
       _displaySendToTeamBanner();
-      
+
       // Fetch updated chat title
       _fetchChatTitle();
     } else {
@@ -1275,15 +1419,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send audio file message (simplified version)
   Future<void> _sendAudioFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest(
-      'POST',
-      Uri.parse(_n8nChatUrl),
-    );
+    var request = http.MultipartRequest('POST', Uri.parse(_n8nChatUrl));
 
     request.fields['action'] = 'sendAudio';
-    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.fields['sessionId'] =
+        SessionService.currentSessionId ?? 'no-session';
     request.headers['Authorization'] = _getBasicAuthHeader();
-    request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['X-Session-ID'] =
+        SessionService.currentSessionId ?? 'no-session';
 
     // Add chatType if available
     if (_chatType != null) {
@@ -1307,20 +1450,28 @@ class _ChatScreenState extends State<ChatScreen> {
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      String botResponse = _parseWebhookResponse(response.body, 'Audio ontvangen en getranscribeerd');
-      
+      String botResponse = _parseWebhookResponse(
+        response.body,
+        'Audio ontvangen en getranscribeerd',
+      );
+
       setState(() {
-        _messages.add(ChatMessage(
-          text: botResponse,
-          isCustomer: false,
-          timestamp: DateTime.now(),
-          status: MessageStatus.sent,
-        ));
+        _messages.add(
+          ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+            status: MessageStatus.sent,
+          ),
+        );
       });
-      
+
+      // Generate and play audio if enabled
+      await _generateAndPlayAudio();
+
       // Show send to team banner after AI response
       _displaySendToTeamBanner();
-      
+
       // Fetch updated chat title
       _fetchChatTitle();
     } else {
@@ -1330,15 +1481,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send document file message (simplified version)
   Future<void> _sendDocumentFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest(
-      'POST',
-      Uri.parse(_n8nDocumentUrl),
-    );
+    var request = http.MultipartRequest('POST', Uri.parse(_n8nDocumentUrl));
 
     request.fields['action'] = 'sendDocument';
-    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.fields['sessionId'] =
+        SessionService.currentSessionId ?? 'no-session';
     request.headers['Authorization'] = _getBasicAuthHeader();
-    request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['X-Session-ID'] =
+        SessionService.currentSessionId ?? 'no-session';
 
     // Add chatType if available
     if (_chatType != null) {
@@ -1363,20 +1513,25 @@ class _ChatScreenState extends State<ChatScreen> {
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      String botResponse = _parseWebhookResponse(response.body, 'Document ontvangen en geanalyseerd');
-      
+      String botResponse = _parseWebhookResponse(
+        response.body,
+        'Document ontvangen en geanalyseerd',
+      );
+
       setState(() {
-        _messages.add(ChatMessage(
-          text: botResponse,
-          isCustomer: false,
-          timestamp: DateTime.now(),
-          status: MessageStatus.sent,
-        ));
+        _messages.add(
+          ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+            status: MessageStatus.sent,
+          ),
+        );
       });
-      
+
       // Show send to team banner after AI response
       _displaySendToTeamBanner();
-      
+
       // Fetch updated chat title
       _fetchChatTitle();
     } else {
@@ -1386,15 +1541,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send video file message
   Future<void> _sendVideoFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest(
-      'POST',
-      Uri.parse(_n8nVideoUrl),
-    );
+    var request = http.MultipartRequest('POST', Uri.parse(_n8nVideoUrl));
 
     request.fields['action'] = 'sendVideo';
-    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.fields['sessionId'] =
+        SessionService.currentSessionId ?? 'no-session';
     request.headers['Authorization'] = _getBasicAuthHeader();
-    request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+    request.headers['X-Session-ID'] =
+        SessionService.currentSessionId ?? 'no-session';
 
     // Add chatType if available
     if (_chatType != null) {
@@ -1422,15 +1576,20 @@ class _ChatScreenState extends State<ChatScreen> {
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      String botResponse = _parseWebhookResponse(response.body, 'Video ontvangen en geanalyseerd');
+      String botResponse = _parseWebhookResponse(
+        response.body,
+        'Video ontvangen en geanalyseerd',
+      );
 
       setState(() {
-        _messages.add(ChatMessage(
-          text: botResponse,
-          isCustomer: false,
-          timestamp: DateTime.now(),
-          status: MessageStatus.sent,
-        ));
+        _messages.add(
+          ChatMessage(
+            text: botResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+            status: MessageStatus.sent,
+          ),
+        );
       });
 
       // Show send to team banner after AI response
@@ -1445,63 +1604,77 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendEmail() async {
     if (_isEmailSending) return;
-    
+
     setState(() {
       _isEmailSending = true;
     });
-    
+
     // Show loading message in chat
     setState(() {
-      _messages.add(ChatMessage(
-        text: "Email wordt verzonden...",
-        isCustomer: false,
-        timestamp: DateTime.now(),
-        status: MessageStatus.sent,
-      ));
+      _messages.add(
+        ChatMessage(
+          text: "Email wordt verzonden...",
+          isCustomer: false,
+          timestamp: DateTime.now(),
+          status: MessageStatus.sent,
+        ),
+      );
     });
-    
+
     _scrollToBottom();
-    
+
     try {
       // Prepare session data and messages for email
       final emailData = {
         'action': 'sendEmail',
         'sessionId': SessionService.currentSessionId ?? 'no-session',
-        'messages': _messages.map((msg) => {
-          'text': msg.text,
-          'isCustomer': msg.isCustomer,
-          'timestamp': msg.timestamp.toIso8601String(),
-          'attachmentType': msg.attachmentType.toString(),
-        }).toList(),
+        'messages':
+            _messages
+                .map(
+                  (msg) => {
+                    'text': msg.text,
+                    'isCustomer': msg.isCustomer,
+                    'timestamp': msg.timestamp.toIso8601String(),
+                    'attachmentType': msg.attachmentType.toString(),
+                  },
+                )
+                .toList(),
         'clientData': AuthService.getClientData(),
       };
-      
-      final response = await http.post(
-        Uri.parse(_n8nEmailUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-        },
-        body: jsonEncode(emailData),
-      ).timeout(const Duration(seconds: 120));
-      
+
+      final response = await http
+          .post(
+            Uri.parse(_n8nEmailUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': _getBasicAuthHeader(),
+              'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+            },
+            body: jsonEncode(emailData),
+          )
+          .timeout(const Duration(seconds: 120));
+
       if (response.statusCode == 200) {
         // Success - reset session and show webhook response
         await SessionService.resetSession();
-        
+
         String emailResponse = '';
-        
-        emailResponse = _parseWebhookResponse(response.body, 'Email succesvol verzonden');
-        
+
+        emailResponse = _parseWebhookResponse(
+          response.body,
+          'Email succesvol verzonden',
+        );
+
         setState(() {
-          _messages.add(ChatMessage(
-            text: emailResponse,
-            isCustomer: false,
-            timestamp: DateTime.now(),
-            status: MessageStatus.sent,
-          ));
+          _messages.add(
+            ChatMessage(
+              text: emailResponse,
+              isCustomer: false,
+              timestamp: DateTime.now(),
+              status: MessageStatus.sent,
+            ),
+          );
         });
       } else {
         // Failure - show error message
@@ -1511,30 +1684,37 @@ class _ChatScreenState extends State<ChatScreen> {
           if (data is Map && data['error'] != null) {
             errorMessage = 'Email verzenden mislukt: ${data['error']}';
           } else {
-            errorMessage = 'Email verzenden mislukt (Status: ${response.statusCode})';
+            errorMessage =
+                'Email verzenden mislukt (Status: ${response.statusCode})';
           }
         } catch (e) {
-          errorMessage = 'Email verzenden mislukt (Status: ${response.statusCode})';
+          errorMessage =
+              'Email verzenden mislukt (Status: ${response.statusCode})';
         }
-        
+
         setState(() {
-          _messages.add(ChatMessage(
-            text: errorMessage,
-            isCustomer: false,
-            timestamp: DateTime.now(),
-            status: MessageStatus.sent,
-          ));
+          _messages.add(
+            ChatMessage(
+              text: errorMessage,
+              isCustomer: false,
+              timestamp: DateTime.now(),
+              status: MessageStatus.sent,
+            ),
+          );
         });
       }
     } catch (e) {
       // Error handling
       setState(() {
-        _messages.add(ChatMessage(
-          text: 'Email verzenden mislukt: Controleer je internetverbinding en probeer het opnieuw.',
-          isCustomer: false,
-          timestamp: DateTime.now(),
-          status: MessageStatus.sent,
-        ));
+        _messages.add(
+          ChatMessage(
+            text:
+                'Email verzenden mislukt: Controleer je internetverbinding en probeer het opnieuw.',
+            isCustomer: false,
+            timestamp: DateTime.now(),
+            status: MessageStatus.sent,
+          ),
+        );
       });
     } finally {
       setState(() {
@@ -1570,72 +1750,95 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _clearConversation() async {
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Chat wissen'),
-          content: const Text('Weet je zeker dat je alle berichten wilt verwijderen?'),
-          actions: [
-            TextButton(
-              onPressed: _isDeletingSession ? null : () => Navigator.pop(context),
-              child: const Text('Annuleer'),
-            ),
-            TextButton(
-              onPressed: _isDeletingSession ? null : () async {
-                final currentSessionId = SessionService.currentSessionId;
-                if (currentSessionId == null) {
-                  Navigator.pop(context);
-                  return;
-                }
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setDialogState) => AlertDialog(
+                  title: const Text('Chat wissen'),
+                  content: const Text(
+                    'Weet je zeker dat je alle berichten wilt verwijderen?',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed:
+                          _isDeletingSession
+                              ? null
+                              : () => Navigator.pop(context),
+                      child: const Text('Annuleer'),
+                    ),
+                    TextButton(
+                      onPressed:
+                          _isDeletingSession
+                              ? null
+                              : () async {
+                                final currentSessionId =
+                                    SessionService.currentSessionId;
+                                if (currentSessionId == null) {
+                                  Navigator.pop(context);
+                                  return;
+                                }
 
-                setDialogState(() {
-                  _isDeletingSession = true;
-                });
+                                setDialogState(() {
+                                  _isDeletingSession = true;
+                                });
 
-                // Call webhook to delete session
-                final success = await _deleteSessionOnWebhook(currentSessionId);
+                                // Call webhook to delete session
+                                final success = await _deleteSessionOnWebhook(
+                                  currentSessionId,
+                                );
 
-                if (success) {
-                  // Clear stored messages for this session
-                  await StorageService.clearMessages(currentSessionId);
-                  
-                  // Clear current session data
-                  await SessionService.clearSession();
-                  
-                  // Close dialog and navigate to StartScreen
-                  if (mounted) {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const StartScreen()),
-                    );
-                  }
-                } else {
-                  // Show error message
-                  setDialogState(() {
-                    _isDeletingSession = false;
-                  });
-                  
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Kon sessie niet verwijderen. Probeer het opnieuw.'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: _isDeletingSession
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Wissen'),
-            ),
-          ],
-        ),
-      ),
+                                if (success) {
+                                  // Clear stored messages for this session
+                                  await StorageService.clearMessages(
+                                    currentSessionId,
+                                  );
+
+                                  // Clear current session data
+                                  await SessionService.clearSession();
+
+                                  // Close dialog and navigate to StartScreen
+                                  if (mounted) {
+                                    Navigator.pop(context);
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (context) => const StartScreen(),
+                                      ),
+                                    );
+                                  }
+                                } else {
+                                  // Show error message
+                                  setDialogState(() {
+                                    _isDeletingSession = false;
+                                  });
+
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Kon sessie niet verwijderen. Probeer het opnieuw.',
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                      child:
+                          _isDeletingSession
+                              ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Text('Wissen'),
+                    ),
+                  ],
+                ),
+          ),
     );
   }
 
@@ -1654,26 +1857,31 @@ class _ChatScreenState extends State<ChatScreen> {
       if (_chatType != null) {
         requestBody['chatType'] = _chatType!;
       }
-      
+
       print('DEBUG: Fetching chat title with: ${jsonEncode(requestBody)}');
 
-      final response = await http.post(
-        Uri.parse(_n8nSessionsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-          'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            Uri.parse(_n8nSessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': _getBasicAuthHeader(),
+              'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(const Duration(seconds: 10));
 
-      print('DEBUG: Chat title API response: ${response.statusCode} - ${response.body}');
-      
+      print(
+        'DEBUG: Chat title API response: ${response.statusCode} - ${response.body}',
+      );
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> session = jsonDecode(response.body);
         final sessionTitle = session['session_title']?.toString();
-        final sessionChatType = session['chatType']?.toString() ?? session['chat_type']?.toString();
+        final sessionChatType =
+            session['chatType']?.toString() ?? session['chat_type']?.toString();
         print('DEBUG: Extracted session title: $sessionTitle');
         print('DEBUG: Extracted chatType: $sessionChatType');
         print('DEBUG: Current _chatTitle value: $_chatTitle');
@@ -1691,7 +1899,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 print('DEBUG: Updated _chatType to: $_chatType');
               }
             });
-            print('DEBUG: setState completed, new _chatTitle: $_chatTitle, new _chatType: $_chatType');
+            print(
+              'DEBUG: setState completed, new _chatTitle: $_chatTitle, new _chatType: $_chatType',
+            );
           } else {
             print('DEBUG: Widget not mounted, skipping setState');
           }
@@ -1723,19 +1933,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
       print('DEBUG: Deleting session with: ${jsonEncode(requestBody)}');
 
-      final response = await http.post(
-        Uri.parse(_n8nSessionsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-          'X-Session-ID': sessionId,
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            Uri.parse(_n8nSessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': _getBasicAuthHeader(),
+              'X-Session-ID': sessionId,
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(const Duration(seconds: 10));
 
-      print('DEBUG: Delete session API response: ${response.statusCode} - ${response.body}');
-      
+      print(
+        'DEBUG: Delete session API response: ${response.statusCode} - ${response.body}',
+      );
+
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
         if (responseData['response'] == 'success') {
@@ -1746,7 +1960,9 @@ class _ChatScreenState extends State<ChatScreen> {
           return false;
         }
       } else {
-        print('DEBUG: Delete session failed with status: ${response.statusCode}');
+        print(
+          'DEBUG: Delete session failed with status: ${response.statusCode}',
+        );
         return false;
       }
     } catch (e) {
@@ -1762,9 +1978,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Kan telefoon app niet openen'),
-          ),
+          const SnackBar(content: Text('Kan telefoon app niet openen')),
         );
       }
     }
@@ -1777,9 +1991,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Kan browser niet openen'),
-          ),
+          const SnackBar(content: Text('Kan browser niet openen')),
         );
       }
     }
@@ -1792,9 +2004,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Kan browser niet openen'),
-          ),
+          const SnackBar(content: Text('Kan browser niet openen')),
         );
       }
     }
@@ -1802,7 +2012,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _showAboutDialog() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
-    
+
     if (mounted) {
       showDialog(
         context: context,
@@ -1849,10 +2059,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   // Version
                   Text(
                     'Versie ${packageInfo.version}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 16),
                   // Developer info
@@ -1880,7 +2087,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () async {
-                      final Uri emailUri = Uri.parse('mailto:app@kwaaijongens.nl');
+                      final Uri emailUri = Uri.parse(
+                        'mailto:app@kwaaijongens.nl',
+                      );
                       if (await canLaunchUrl(emailUri)) {
                         await launchUrl(emailUri);
                       }
@@ -1897,9 +2106,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () async {
-                      final Uri websiteUri = Uri.parse('https://www.kwaaijongens.nl');
+                      final Uri websiteUri = Uri.parse(
+                        'https://www.kwaaijongens.nl',
+                      );
                       if (await canLaunchUrl(websiteUri)) {
-                        await launchUrl(websiteUri, mode: LaunchMode.externalApplication);
+                        await launchUrl(
+                          websiteUri,
+                          mode: LaunchMode.externalApplication,
+                        );
                       }
                     },
                     child: const Text(
@@ -1948,9 +2162,7 @@ class _ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFF0F0F0), width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFF0F0F0), width: 1)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1976,7 +2188,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 _chatTitle,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF374151),
                 ),
@@ -1985,27 +2197,44 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ),
+          IconButton(
+            onPressed: () {
+              setState(() {
+                _audioEnabled = !_audioEnabled;
+              });
+            },
+            icon: Icon(
+              _audioEnabled ? Icons.volume_up : Icons.volume_off,
+              color:
+                  _audioEnabled
+                      ? const Color(0xFFCC0001)
+                      : const Color(0xFF6B7280),
+              size: 24,
+            ),
+            padding: const EdgeInsets.all(8.0),
+          ),
           PopupMenuButton<String>(
-                onSelected: _handleMenuSelection,
-                icon: Container(
-                  padding: const EdgeInsets.all(8.0),
-                  child: const Text(
-                    '⋮',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF374151),
-                      height: 1.0,
-                    ),
-                  ),
+            onSelected: _handleMenuSelection,
+            icon: Container(
+              padding: const EdgeInsets.all(8.0),
+              child: const Text(
+                '⋮',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF374151),
+                  height: 1.0,
                 ),
-                offset: const Offset(0, 40),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                color: Colors.white,
-                elevation: 8,
-                itemBuilder: (BuildContext context) => [
+              ),
+            ),
+            offset: const Offset(0, 40),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            color: Colors.white,
+            elevation: 8,
+            itemBuilder:
+                (BuildContext context) => [
                   PopupMenuItem<String>(
                     value: 'forward_conversation',
                     child: Container(
@@ -2016,7 +2245,10 @@ class _ChatScreenState extends State<ChatScreen> {
                           SizedBox(width: 12),
                           Text(
                             'Gesprek doorsturen',
-                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
                           ),
                         ],
                       ),
@@ -2032,7 +2264,10 @@ class _ChatScreenState extends State<ChatScreen> {
                           SizedBox(width: 12),
                           Text(
                             'Gesprek wissen',
-                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
                           ),
                         ],
                       ),
@@ -2048,7 +2283,10 @@ class _ChatScreenState extends State<ChatScreen> {
                           SizedBox(width: 12),
                           Text(
                             'Helpdesk (FAQ\'s)',
-                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
                           ),
                         ],
                       ),
@@ -2065,7 +2303,10 @@ class _ChatScreenState extends State<ChatScreen> {
                           SizedBox(width: 12),
                           Text(
                             'Bel Kwaaijongens',
-                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
                           ),
                         ],
                       ),
@@ -2081,7 +2322,10 @@ class _ChatScreenState extends State<ChatScreen> {
                           SizedBox(width: 12),
                           Text(
                             'Privacyverklaring',
-                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
                           ),
                         ],
                       ),
@@ -2098,14 +2342,17 @@ class _ChatScreenState extends State<ChatScreen> {
                           SizedBox(width: 12),
                           Text(
                             'Over deze app',
-                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
                 ],
-              ),
+          ),
         ],
       ),
     );
@@ -2113,7 +2360,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildSendToTeamBanner() {
     if (!_showSendToTeamBanner) return const SizedBox.shrink();
-    
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -2131,11 +2378,7 @@ class _ChatScreenState extends State<ChatScreen> {
               color: Color(0xFFCC0001),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.check,
-              color: Colors.white,
-              size: 12,
-            ),
+            child: const Icon(Icons.check, color: Colors.white, size: 12),
           ),
           const SizedBox(width: 12),
           const Expanded(
@@ -2178,7 +2421,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _displaySendToTeamBanner() {
     // Cancel any existing timer
     _bannerTimer?.cancel();
-    
+
     // Make banner available and show if text field is empty
     setState(() {
       _bannerAvailable = true;
@@ -2191,162 +2434,185 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       body: SafeArea(
         child: Column(
-        children: [
-          // Custom Header
-          _buildHeader(),
-          
-          // Chat messages
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length + (_isLoading ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == _messages.length && _isLoading) {
-                  return TypingIndicator(isUploadingFile: _isUploadingFile);
-                }
-                return ChatBubble(message: _messages[index]);
-              },
+          children: [
+            // Custom Header
+            _buildHeader(),
+
+            // Chat messages
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                itemCount: _messages.length + (_isLoading ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == _messages.length && _isLoading) {
+                    return TypingIndicator(isUploadingFile: _isUploadingFile);
+                  }
+                  return ChatBubble(message: _messages[index]);
+                },
+              ),
             ),
-          ),
-          
-          // Send to Team Banner
-          _buildSendToTeamBanner(),
-          
-          // Recording indicator
-          if (_isRecording)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.red.shade50,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Opnemen... ${_formatDuration(_recordingDuration)}',
-                    style: const TextStyle(
+
+            // Send to Team Banner
+            _buildSendToTeamBanner(),
+
+            // Recording indicator
+            if (_isRecording)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                color: Colors.red.shade50,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.fiber_manual_record,
                       color: Colors.red,
-                      fontWeight: FontWeight.bold,
+                      size: 16,
                     ),
-                  ),
-                ],
-              ),
-            ),
-          // Message input
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                top: BorderSide(color: Colors.grey, width: 0.5),
-              ),
-            ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(24),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Opnemen... ${_formatDuration(_recordingDuration)}',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
                       ),
-                      child: Row(
-                        children: [
-                          // Attachment icon
-                          IconButton(
-                            onPressed: _isLoading ? null : _showAttachmentDialog,
-                            icon: Icon(
-                              Icons.attach_file,
-                              color: _isLoading ? Colors.grey.shade400 : Colors.grey,
-                              size: 20,
-                            ),
-                          ),
-                          // Text input
-                          Expanded(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minHeight: 48.0, // Single line height (24px text + 24px padding)
-                                maxHeight: 144.0, // 6 lines height (6 * 24px text + 24px padding)
+                    ),
+                  ],
+                ),
+              ),
+            // Message input
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Colors.grey, width: 0.5)),
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Row(
+                          children: [
+                            // Attachment icon
+                            IconButton(
+                              onPressed:
+                                  _isLoading ? null : _showAttachmentDialog,
+                              icon: Icon(
+                                Icons.attach_file,
+                                color:
+                                    _isLoading
+                                        ? Colors.grey.shade400
+                                        : Colors.grey,
+                                size: 20,
                               ),
-                              child: TextField(
-                                controller: _messageController,
-                                onChanged: _onTextChanged,
-                                enabled: !_isLoading,
-                                decoration: InputDecoration(
-                                  hintText: _isLoading ? 'Even geduld...' : 'Deel je blog idee...',
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            // Text input
+                            Expanded(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight:
+                                      48.0, // Single line height (24px text + 24px padding)
+                                  maxHeight:
+                                      144.0, // 6 lines height (6 * 24px text + 24px padding)
                                 ),
-                                maxLines: null,
-                                textInputAction: TextInputAction.newline,
-                                scrollPhysics: const BouncingScrollPhysics(),
+                                child: TextField(
+                                  controller: _messageController,
+                                  onChanged: _onTextChanged,
+                                  enabled: !_isLoading,
+                                  decoration: InputDecoration(
+                                    hintText:
+                                        _isLoading
+                                            ? 'Even geduld...'
+                                            : 'Deel je blog idee...',
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  maxLines: null,
+                                  textInputAction: TextInputAction.newline,
+                                  scrollPhysics: const BouncingScrollPhysics(),
+                                ),
                               ),
                             ),
-                          ),
-                          // Camera icon
-                          IconButton(
-                            onPressed: _isLoading ? null : _showImageSourceDialog,
-                            icon: Icon(
-                              Icons.camera_alt,
-                              color: _isLoading ? Colors.grey.shade400 : Colors.grey,
-                              size: 20,
+                            // Camera icon
+                            IconButton(
+                              onPressed:
+                                  _isLoading ? null : _showImageSourceDialog,
+                              icon: Icon(
+                                Icons.camera_alt,
+                                color:
+                                    _isLoading
+                                        ? Colors.grey.shade400
+                                        : Colors.grey,
+                                size: 20,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Voice or Send button
-                  Container(
-                    decoration: BoxDecoration(
-                      color: _isLoading 
-                          ? Colors.grey 
-                          : (_isRecording ? Colors.red : const Color(0xFFCC0001)),
-                      shape: BoxShape.circle,
+                    const SizedBox(width: 8),
+                    // Voice or Send button
+                    Container(
+                      decoration: BoxDecoration(
+                        color:
+                            _isLoading
+                                ? Colors.grey
+                                : (_isRecording
+                                    ? Colors.red
+                                    : const Color(0xFFCC0001)),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        onPressed:
+                            _isLoading
+                                ? null
+                                : (_isTyping
+                                    ? _sendMessage
+                                    : _isRecording
+                                    ? _stopRecording
+                                    : _startRecording),
+                        icon:
+                            _isLoading
+                                ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                                : Icon(
+                                  _isTyping
+                                      ? Icons.send
+                                      : (_isRecording ? Icons.stop : Icons.mic),
+                                  color: Colors.white,
+                                ),
+                      ),
                     ),
-                    child: IconButton(
-                      onPressed: _isLoading ? null : (_isTyping 
-                          ? _sendMessage 
-                          : _isRecording
-                              ? _stopRecording
-                              : _startRecording),
-                      icon: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : Icon(
-                              _isTyping 
-                                  ? Icons.send 
-                                  : (_isRecording ? Icons.stop : Icons.mic),
-                              color: Colors.white,
-                            ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
 }
 
-enum AttachmentType {
-  none,
-  audio,
-  image,
-  document,
-  video,
-}
+enum AttachmentType { none, audio, image, document, video }
 
 enum MessageStatus { pending, sent }
 
@@ -2361,6 +2627,7 @@ class ChatMessage {
   final AttachmentType attachmentType;
   final MessageStatus status;
   final bool fromFCM;
+  final bool autoPlay;
 
   ChatMessage({
     required this.text,
@@ -2373,6 +2640,7 @@ class ChatMessage {
     this.attachmentType = AttachmentType.none,
     this.status = MessageStatus.pending,
     this.fromFCM = false,
+    this.autoPlay = false,
   });
 
   // Convert to JSON for storage (files stored as paths)
@@ -2397,18 +2665,16 @@ class ChatMessage {
       text: json['text'],
       isCustomer: json['isCustomer'],
       timestamp: DateTime.parse(json['timestamp']),
-      audioFile: json['audioFilePath'] != null
-          ? File(json['audioFilePath'])
-          : null,
-      imageFile: json['imageFilePath'] != null
-          ? File(json['imageFilePath'])
-          : null,
-      documentFile: json['documentFilePath'] != null
-          ? File(json['documentFilePath'])
-          : null,
-      videoFile: json['videoFilePath'] != null
-          ? File(json['videoFilePath'])
-          : null,
+      audioFile:
+          json['audioFilePath'] != null ? File(json['audioFilePath']) : null,
+      imageFile:
+          json['imageFilePath'] != null ? File(json['imageFilePath']) : null,
+      documentFile:
+          json['documentFilePath'] != null
+              ? File(json['documentFilePath'])
+              : null,
+      videoFile:
+          json['videoFilePath'] != null ? File(json['videoFilePath']) : null,
       attachmentType: _parseAttachmentType(json['attachmentType']),
       status: _parseMessageStatus(json['status']),
       fromFCM: json['fromFCM'] ?? false,
@@ -2453,19 +2719,16 @@ class ChatBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment: message.isCustomer 
-            ? MainAxisAlignment.end 
-            : MainAxisAlignment.start,
+        mainAxisAlignment:
+            message.isCustomer
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
         children: [
           if (!message.isCustomer) ...[
             const CircleAvatar(
               backgroundColor: Color(0xFFCC0001),
               radius: 16,
-              child: Icon(
-                Icons.smart_toy,
-                color: Colors.white,
-                size: 18,
-              ),
+              child: Icon(Icons.smart_toy, color: Colors.white, size: 18),
             ),
             const SizedBox(width: 8),
           ],
@@ -2478,21 +2741,27 @@ class ChatBubble extends StatelessWidget {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: message.isCustomer 
-                        ? const Color(0xFFCC0001) 
-                        : Colors.grey.shade100,
+                    color:
+                        message.isCustomer
+                            ? const Color(0xFFCC0001)
+                            : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (message.attachmentType == AttachmentType.audio && message.audioFile != null)
+                      if (message.attachmentType == AttachmentType.audio &&
+                          message.audioFile != null)
                         AudioMessageWidget(
                           audioFile: message.audioFile!,
                           isCustomer: message.isCustomer,
-                          duration: message.text.replaceAll('🎤 Audio bericht (', '').replaceAll(')', ''),
+                          duration: message.text
+                              .replaceAll('🎤 Audio bericht (', '')
+                              .replaceAll(')', ''),
+                          autoPlay: message.autoPlay,
                         )
-                      else if (message.attachmentType == AttachmentType.image && message.imageFile != null)
+                      else if (message.attachmentType == AttachmentType.image &&
+                          message.imageFile != null)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -2504,31 +2773,41 @@ class ChatBubble extends StatelessWidget {
                             Text(
                               _formatTime(message.timestamp),
                               style: TextStyle(
-                                color: message.isCustomer 
-                                    ? Colors.white70 
-                                    : Colors.grey.shade600,
+                                color:
+                                    message.isCustomer
+                                        ? Colors.white70
+                                        : Colors.grey.shade600,
                                 fontSize: 12,
                               ),
                             ),
                           ],
                         )
-                      else if (message.attachmentType == AttachmentType.document && message.documentFile != null)
+                      else if (message.attachmentType ==
+                              AttachmentType.document &&
+                          message.documentFile != null)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             DocumentMessageWidget(
                               documentFile: message.documentFile!,
                               isCustomer: message.isCustomer,
-                              fileName: AttachmentService.getFileInfo(message.documentFile!)['fileName'],
-                              fileSize: AttachmentService.getFileInfo(message.documentFile!)['size'],
+                              fileName:
+                                  AttachmentService.getFileInfo(
+                                    message.documentFile!,
+                                  )['fileName'],
+                              fileSize:
+                                  AttachmentService.getFileInfo(
+                                    message.documentFile!,
+                                  )['size'],
                             ),
                             const SizedBox(height: 4),
                             Text(
                               _formatTime(message.timestamp),
                               style: TextStyle(
-                                color: message.isCustomer 
-                                    ? Colors.white70 
-                                    : Colors.grey.shade600,
+                                color:
+                                    message.isCustomer
+                                        ? Colors.white70
+                                        : Colors.grey.shade600,
                                 fontSize: 12,
                               ),
                             ),
@@ -2541,9 +2820,10 @@ class ChatBubble extends StatelessWidget {
                             LinkableSelectableText(
                               text: message.text,
                               style: TextStyle(
-                                color: message.isCustomer 
-                                    ? Colors.white 
-                                    : Colors.black87,
+                                color:
+                                    message.isCustomer
+                                        ? Colors.white
+                                        : Colors.black87,
                                 fontSize: 16,
                               ),
                             ),
@@ -2551,9 +2831,10 @@ class ChatBubble extends StatelessWidget {
                             Text(
                               _formatTime(message.timestamp),
                               style: TextStyle(
-                                color: message.isCustomer 
-                                    ? Colors.white70 
-                                    : Colors.grey.shade600,
+                                color:
+                                    message.isCustomer
+                                        ? Colors.white70
+                                        : Colors.grey.shade600,
                                 fontSize: 12,
                               ),
                             ),
@@ -2563,7 +2844,8 @@ class ChatBubble extends StatelessWidget {
                   ),
                 ),
                 // Status icon for pending customer messages
-                if (message.isCustomer && message.status == MessageStatus.pending)
+                if (message.isCustomer &&
+                    message.status == MessageStatus.pending)
                   Positioned(
                     bottom: 4,
                     right: 4,
@@ -2581,11 +2863,7 @@ class ChatBubble extends StatelessWidget {
             const CircleAvatar(
               backgroundColor: Colors.grey,
               radius: 16,
-              child: Icon(
-                Icons.person,
-                color: Colors.white,
-                size: 18,
-              ),
+              child: Icon(Icons.person, color: Colors.white, size: 18),
             ),
           ],
         ],
@@ -2636,18 +2914,11 @@ class _TypingIndicatorState extends State<TypingIndicator>
           const CircleAvatar(
             backgroundColor: Color(0xFFCC0001),
             radius: 16,
-            child: Icon(
-              Icons.smart_toy,
-              color: Colors.white,
-              size: 18,
-            ),
+            child: Icon(Icons.smart_toy, color: Colors.white, size: 18),
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(18),
@@ -2657,10 +2928,7 @@ class _TypingIndicatorState extends State<TypingIndicator>
               children: [
                 Text(
                   widget.isUploadingFile ? 'Bestand uploaden' : 'Aan het typen',
-                  style: const TextStyle(
-                    color: Colors.black87,
-                    fontSize: 16,
-                  ),
+                  style: const TextStyle(color: Colors.black87, fontSize: 16),
                 ),
                 const SizedBox(width: 8),
                 AnimatedBuilder(
@@ -2669,11 +2937,13 @@ class _TypingIndicatorState extends State<TypingIndicator>
                     return Row(
                       children: List.generate(3, (index) {
                         final delay = index * 0.2;
-                        final animValue = (_animationController.value - delay).clamp(0.0, 1.0);
-                        final opacity = (animValue < 0.5) 
-                            ? animValue * 2 
-                            : 2 - (animValue * 2);
-                        
+                        final animValue = (_animationController.value - delay)
+                            .clamp(0.0, 1.0);
+                        final opacity =
+                            (animValue < 0.5)
+                                ? animValue * 2
+                                : 2 - (animValue * 2);
+
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 1),
                           child: Opacity(
@@ -2704,18 +2974,11 @@ class LinkableSelectableText extends StatelessWidget {
   final String text;
   final TextStyle? style;
 
-  const LinkableSelectableText({
-    super.key,
-    required this.text,
-    this.style,
-  });
+  const LinkableSelectableText({super.key, required this.text, this.style});
 
   @override
   Widget build(BuildContext context) {
-    return SelectableText.rich(
-      _buildTextSpan(),
-      style: style,
-    );
+    return SelectableText.rich(_buildTextSpan(), style: style);
   }
 
   TextSpan _buildTextSpan() {
@@ -2731,32 +2994,34 @@ class LinkableSelectableText extends StatelessWidget {
     for (final match in matches) {
       // Add text before the link
       if (match.start > currentIndex) {
-        children.add(TextSpan(
-          text: text.substring(currentIndex, match.start),
-          style: style,
-        ));
+        children.add(
+          TextSpan(
+            text: text.substring(currentIndex, match.start),
+            style: style,
+          ),
+        );
       }
 
       // Add the clickable link
       final linkText = match.group(0)!;
-      children.add(TextSpan(
-        text: linkText,
-        style: style?.copyWith(
-          color: Colors.blue,
-          decoration: TextDecoration.underline,
+      children.add(
+        TextSpan(
+          text: linkText,
+          style: style?.copyWith(
+            color: Colors.blue,
+            decoration: TextDecoration.underline,
+          ),
+          recognizer:
+              TapGestureRecognizer()..onTap = () => _launchUrl(linkText),
         ),
-        recognizer: TapGestureRecognizer()..onTap = () => _launchUrl(linkText),
-      ));
+      );
 
       currentIndex = match.end;
     }
 
     // Add remaining text after the last link
     if (currentIndex < text.length) {
-      children.add(TextSpan(
-        text: text.substring(currentIndex),
-        style: style,
-      ));
+      children.add(TextSpan(text: text.substring(currentIndex), style: style));
     }
 
     // If no links found, return the entire text as a single span
@@ -2769,7 +3034,7 @@ class LinkableSelectableText extends StatelessWidget {
 
   Future<void> _launchUrl(String urlString) async {
     Uri? uri;
-    
+
     // Handle different URL formats
     if (urlString.contains('@')) {
       // Email address
