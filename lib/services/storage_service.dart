@@ -125,7 +125,7 @@ class StorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final sessionJson = jsonEncode(sessionData.toJson());
-      await prefs.setString('${_sessionDataKey}${sessionData.sessionId}', sessionJson);
+      await prefs.setString('$_sessionDataKey${sessionData.sessionId}', sessionJson);
       return true;
     } catch (e) {
       print('Error saving session data: $e');
@@ -137,7 +137,7 @@ class StorageService {
   static Future<SessionData?> loadSessionData(String sessionId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final sessionJson = prefs.getString('${_sessionDataKey}$sessionId');
+      final sessionJson = prefs.getString('$_sessionDataKey$sessionId');
       
       if (sessionJson != null) {
         final sessionMap = jsonDecode(sessionJson);
@@ -184,7 +184,7 @@ class StorageService {
   static Future<bool> clearSessionData(String sessionId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('${_sessionDataKey}$sessionId');
+      await prefs.remove('$_sessionDataKey$sessionId');
       return true;
     } catch (e) {
       print('Error clearing session data: $e');

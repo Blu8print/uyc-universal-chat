@@ -271,6 +271,7 @@ class ApiService {
             messageCount: 0, // Not provided by server
             createdAt: sessionJson['created_at'],
             chatType: sessionJson['chat_type'],
+            emailSent: sessionJson['email_sent'] ?? sessionJson['emailSent'] ?? false,
           )).toList();
           
           // Sort sessions by lastActivity (most recent first)
@@ -294,6 +295,7 @@ class ApiService {
             messageCount: sessionJson['messageCount'] ?? 0,
             createdAt: sessionJson['created_at'] ?? sessionJson['createdAt'],
             chatType: sessionJson['chat_type'] ?? sessionJson['chatType'],
+            emailSent: sessionJson['email_sent'] ?? sessionJson['emailSent'] ?? false,
           )).toList();
           
           // Sort sessions by lastActivity (most recent first)
@@ -335,21 +337,23 @@ class ApiService {
     required String companyName,
     String? title,
     String? description,
+    bool? emailSent,
   }) async {
     try {
       final authBytes = utf8.encode(_sessionAuth);
       final authHeader = 'Basic ${base64Encode(authBytes)}';
-      
-      final requestBody = {
+
+      final Map<String, dynamic> requestBody = {
         'method': 'update',
         'sessionId': sessionId,
         'phoneNumber': phoneNumber,
         'name': name,
         'companyName': companyName,
       };
-      
+
       if (title != null) requestBody['title'] = title;
       if (description != null) requestBody['description'] = description;
+      if (emailSent != null) requestBody['emailSent'] = emailSent;
       
       final response = await http.post(
         Uri.parse(_sessionsUrl),
@@ -378,6 +382,7 @@ class ApiService {
               messageCount: 0,
               createdAt: responseData['created_at'],
               chatType: responseData['chat_type'],
+              emailSent: responseData['email_sent'] ?? responseData['emailSent'] ?? emailSent ?? false,
             ),
           );
         }
@@ -396,6 +401,7 @@ class ApiService {
               messageCount: data['messageCount'] ?? 0,
               createdAt: data['created_at'] ?? data['createdAt'],
               chatType: data['chat_type'] ?? data['chatType'],
+              emailSent: data['email_sent'] ?? data['emailSent'] ?? emailSent ?? false,
             ),
           );
         } else {
@@ -630,6 +636,7 @@ class SessionData {
   final int messageCount;
   final String? createdAt;
   final String? chatType;
+  final bool emailSent;
 
   SessionData({
     required this.sessionId,
@@ -640,6 +647,7 @@ class SessionData {
     this.messageCount = 0,
     this.createdAt,
     this.chatType,
+    this.emailSent = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -652,6 +660,7 @@ class SessionData {
       'messageCount': messageCount,
       'createdAt': createdAt,
       'chatType': chatType,
+      'emailSent': emailSent,
     };
   }
 
@@ -665,6 +674,7 @@ class SessionData {
       messageCount: json['messageCount'] ?? 0,
       createdAt: json['createdAt'],
       chatType: json['chatType'],
+      emailSent: json['emailSent'] ?? false,
     );
   }
 }

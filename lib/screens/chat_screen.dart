@@ -75,6 +75,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Duration _recordingDuration = Duration.zero;
   bool _showSendToTeamBanner = false;
   bool _bannerAvailable = false;
+  bool _userTypedAfterEmailSent = false;
   Timer? _bannerTimer;
   String _chatTitle = 'Chat';
   String? _chatType;
@@ -166,7 +167,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _initializeServices() async {
-    await SessionService.initializeWithSync();
+    // Session should already be initialized by StartScreen before navigation
+    // Only initialize Firebase messaging here
     await _initializeFirebaseMessaging();
   }
 
@@ -1184,6 +1186,10 @@ class _ChatScreenState extends State<ChatScreen> {
   void _onTextChanged(String text) {
     setState(() {
       _isTyping = text.trim().isNotEmpty;
+      // When user types, mark that they've typed after email was sent
+      if (text.trim().isNotEmpty) {
+        _userTypedAfterEmailSent = true;
+      }
     });
 
     // Show/hide banner based on text field state
@@ -1610,16 +1616,14 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     // Show loading message in chat
-    setState(() {
-      _messages.add(
-        ChatMessage(
-          text: "Email wordt verzonden...",
-          isCustomer: false,
-          timestamp: DateTime.now(),
-          status: MessageStatus.sent,
-        ),
-      );
-    });
+    await _addMessage(
+      ChatMessage(
+        text: "Email wordt verzonden...",
+        isCustomer: false,
+        timestamp: DateTime.now(),
+        status: MessageStatus.sent,
+      ),
+    );
 
     _scrollToBottom();
 
@@ -1656,9 +1660,7 @@ class _ChatScreenState extends State<ChatScreen> {
           .timeout(const Duration(seconds: 120));
 
       if (response.statusCode == 200) {
-        // Success - reset session and show webhook response
-        await SessionService.resetSession();
-
+        // Success - show webhook response (keep same session)
         String emailResponse = '';
 
         emailResponse = _parseWebhookResponse(
@@ -1666,15 +1668,21 @@ class _ChatScreenState extends State<ChatScreen> {
           'Email succesvol verzonden',
         );
 
+        await _addMessage(
+          ChatMessage(
+            text: emailResponse,
+            isCustomer: false,
+            timestamp: DateTime.now(),
+            status: MessageStatus.sent,
+          ),
+        );
+
+        // Mark session as email sent
+        await SessionService.markCurrentSessionEmailSent();
+
+        // Reset typing flag to show the new banner message
         setState(() {
-          _messages.add(
-            ChatMessage(
-              text: emailResponse,
-              isCustomer: false,
-              timestamp: DateTime.now(),
-              status: MessageStatus.sent,
-            ),
-          );
+          _userTypedAfterEmailSent = false;
         });
       } else {
         // Failure - show error message
@@ -1692,30 +1700,26 @@ class _ChatScreenState extends State<ChatScreen> {
               'Email verzenden mislukt (Status: ${response.statusCode})';
         }
 
-        setState(() {
-          _messages.add(
-            ChatMessage(
-              text: errorMessage,
-              isCustomer: false,
-              timestamp: DateTime.now(),
-              status: MessageStatus.sent,
-            ),
-          );
-        });
-      }
-    } catch (e) {
-      // Error handling
-      setState(() {
-        _messages.add(
+        await _addMessage(
           ChatMessage(
-            text:
-                'Email verzenden mislukt: Controleer je internetverbinding en probeer het opnieuw.',
+            text: errorMessage,
             isCustomer: false,
             timestamp: DateTime.now(),
             status: MessageStatus.sent,
           ),
         );
-      });
+      }
+    } catch (e) {
+      // Error handling
+      await _addMessage(
+        ChatMessage(
+          text:
+              'Email verzenden mislukt: Controleer je internetverbinding en probeer het opnieuw.',
+          isCustomer: false,
+          timestamp: DateTime.now(),
+          status: MessageStatus.sent,
+        ),
+      );
     } finally {
       setState(() {
         _isEmailSending = false;
@@ -2381,10 +2385,12 @@ class _ChatScreenState extends State<ChatScreen> {
             child: const Icon(Icons.check, color: Colors.white, size: 12),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Alles verteld wat we moeten weten? Mooi! Stuur maar door!',
-              style: TextStyle(
+              (SessionService.currentSessionData?.emailSent ?? false) && !_userTypedAfterEmailSent
+                  ? 'Wil je nog iets toevoegen? Dat kan, begin met typen'
+                  : 'Alles verteld wat we moeten weten? Mooi! Stuur maar door!',
+              style: const TextStyle(
                 fontSize: 14,
                 color: Color(0xFF374151),
                 fontWeight: FontWeight.w500,
@@ -2392,27 +2398,28 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _showSendToTeamBanner = false;
-              });
-              _bannerTimer?.cancel();
-              _sendEmail();
-            },
-            style: TextButton.styleFrom(
-              backgroundColor: const Color(0xFFCC0001),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
+          if (!((SessionService.currentSessionData?.emailSent ?? false) && !_userTypedAfterEmailSent))
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _showSendToTeamBanner = false;
+                });
+                _bannerTimer?.cancel();
+                _sendEmail();
+              },
+              style: TextButton.styleFrom(
+                backgroundColor: const Color(0xFFCC0001),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              child: const Text(
+                'Versturen',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               ),
             ),
-            child: const Text(
-              'Versturen',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            ),
-          ),
         ],
       ),
     );

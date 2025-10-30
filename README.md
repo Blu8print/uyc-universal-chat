@@ -107,6 +107,7 @@ lib/
 #### Webhook Endpoints
 - **Chat**: `https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat`
 - **Images**: `https://automation.kwaaijongens.nl/webhook/media_image`
+- **Videos**: `https://automation.kwaaijongens.nl/webhook/media_video` (max 200MB)
 - **Documents**: `https://automation.kwaaijongens.nl/webhook/media_document`
 - **Email**: `https://automation.kwaaijongens.nl/webhook/send-email`
 - **Send SMS**: `https://automation.kwaaijongens.nl/webhook/send-sms`

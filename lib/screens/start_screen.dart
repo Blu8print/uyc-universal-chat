@@ -180,13 +180,16 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
     }
 
     // Always start a new session for action buttons with the chatType
-    await SessionService.resetSession(chatType: chatType);
+    final sessionId = await SessionService.resetSession(chatType: chatType);
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ChatScreen(actionContext: actionType),
-      ),
-    );
+    // Validate session was created before navigating
+    if (sessionId.isNotEmpty && mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(actionContext: actionType),
+        ),
+      );
+    }
   }
 
   Future<void> _openSession(SessionData session) async {
@@ -717,11 +720,28 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
                       color: Colors.white24,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
-                      Icons.folder_outlined,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                    child: session.thumbnail != null && session.thumbnail!.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            session.thumbnail!,
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.folder_outlined,
+                                color: Colors.white,
+                                size: 24,
+                              );
+                            },
+                          ),
+                        )
+                      : const Icon(
+                          Icons.folder_outlined,
+                          color: Colors.white,
+                          size: 24,
+                        ),
                   ),
 
                   const SizedBox(width: 15),
@@ -732,12 +752,28 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (session.lastActivity != null)
-                          Text(
-                            'Aangeleverd: ${_formatDate(session.lastActivity!)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withValues(alpha: 0.8),
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  session.emailSent
+                                      ? 'Aangeleverd: ${_formatDate(session.lastActivity!)}'
+                                      : 'Gestart: ${_formatDate(session.lastActivity!)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ),
+                              if (session.emailSent) ...[
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.check,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ],
+                            ],
                           ),
                         const SizedBox(height: 4),
                         Text(
@@ -751,9 +787,11 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
-                        const Text(
-                          'Open de aangeleverde input >',
-                          style: TextStyle(
+                        Text(
+                          session.emailSent
+                              ? 'Open de aangeleverde input >'
+                              : 'In behandeling - open chat >',
+                          style: const TextStyle(
                             fontSize: 14,
                             color: Colors.white70,
                           ),

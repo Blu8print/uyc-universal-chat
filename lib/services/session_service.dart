@@ -31,6 +31,7 @@ class SessionService {
   // Start new session with backend sync
   static Future<String> startNewSession({String? chatType}) async {
     _currentSessionId = _generateSessionId();
+    print('[SessionService] Creating new session: $_currentSessionId${chatType != null ? " (chatType: $chatType)" : ""}');
     await _saveSessionId(_currentSessionId!);
 
     // Try to create session on backend
@@ -44,9 +45,10 @@ class SessionService {
     try {
       final prefs = await SharedPreferences.getInstance();
       _currentSessionId = prefs.getString(_sessionIdKey);
-      
+
       // If no session exists, create a new one
       if (_currentSessionId == null) {
+        print('[SessionService] No existing session found, creating new one');
         await startNewSession();
       } else {
         // Load session data for existing session
@@ -77,6 +79,7 @@ class SessionService {
   // Clear session data
   static Future<void> clearSession() async {
     try {
+      print('[SessionService] Clearing current session: $_currentSessionId');
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_sessionIdKey);
       _currentSessionId = null;
@@ -181,7 +184,57 @@ class SessionService {
       return false;
     }
   }
-  
+
+  // Mark current session as email sent
+  static Future<void> markCurrentSessionEmailSent() async {
+    if (_currentSessionId == null || _currentSessionData == null) return;
+
+    try {
+      print('[SessionService] Marking session as email sent: $_currentSessionId');
+
+      // Create updated session data with emailSent flag
+      final updatedSessionData = SessionData(
+        sessionId: _currentSessionData!.sessionId,
+        title: _currentSessionData!.title,
+        description: _currentSessionData!.description,
+        thumbnail: _currentSessionData!.thumbnail,
+        lastActivity: _currentSessionData!.lastActivity,
+        messageCount: _currentSessionData!.messageCount,
+        createdAt: _currentSessionData!.createdAt,
+        chatType: _currentSessionData!.chatType,
+        emailSent: true,
+      );
+
+      // Update current session data
+      _currentSessionData = updatedSessionData;
+
+      // Save to local storage
+      await StorageService.saveSessionData(updatedSessionData);
+
+      // Update in session list to keep it synced
+      final index = _sessionList.indexWhere((s) => s.sessionId == _currentSessionId);
+      if (index != -1) {
+        _sessionList[index] = updatedSessionData;
+        await StorageService.saveSessionList(_sessionList);
+      }
+
+      // Send emailSent flag to backend webhook
+      final user = await StorageService.getUser();
+      if (user != null) {
+        await ApiService.updateSession(
+          sessionId: _currentSessionId!,
+          phoneNumber: user.phoneNumber,
+          name: user.name,
+          companyName: user.companyName,
+          emailSent: true,
+        );
+        print('[SessionService] Email sent flag updated on backend');
+      }
+    } catch (e) {
+      print('[SessionService] Error marking session as email sent: $e');
+    }
+  }
+
   // Delete session
   static Future<bool> deleteSession(String sessionId) async {
     try {
@@ -227,6 +280,7 @@ class SessionService {
   // Switch to different session
   static Future<bool> switchToSession(String sessionId) async {
     try {
+      print('[SessionService] Switching to existing session: $sessionId');
       // Save current session ID
       _currentSessionId = sessionId;
       await _saveSessionId(sessionId);

@@ -6,12 +6,16 @@ class AudioMessageWidget extends StatefulWidget {
   final File audioFile;
   final bool isCustomer;
   final String duration;
+  final bool autoPlay;
+  final VoidCallback? onAutoPlayTriggered;
 
   const AudioMessageWidget({
     super.key,
     required this.audioFile,
     required this.isCustomer,
     required this.duration,
+    this.autoPlay = false,
+    this.onAutoPlayTriggered,
   });
 
   @override
@@ -32,18 +36,27 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
         _isPlaying = state == PlayerState.playing;
       });
     });
-    
+
     _audioPlayer.onDurationChanged.listen((duration) {
       setState(() {
         _duration = duration;
       });
     });
-    
+
     _audioPlayer.onPositionChanged.listen((position) {
       setState(() {
         _position = position;
       });
     });
+
+    // Auto-play if requested
+    if (widget.autoPlay) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _togglePlayback();
+        // Notify parent that auto-play has been triggered
+        widget.onAutoPlayTriggered?.call();
+      });
+    }
   }
 
   @override
