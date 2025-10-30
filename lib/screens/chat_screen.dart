@@ -1204,6 +1204,17 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _onTextFieldTapped() {
+    // Hide banner immediately when user taps the input field
+    if (_showSendToTeamBanner) {
+      setState(() {
+        _showSendToTeamBanner = false;
+      });
+    }
+    // Scroll to bottom when input is tapped
+    _scrollToBottom();
+  }
+
   // Get all pending messages in chronological order
   List<ChatMessage> _getPendingMessages() {
     return _messages
@@ -1382,7 +1393,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final clientData = AuthService.getClientData();
     if (clientData != null) {
-      request.fields['clientData'] = jsonEncode(clientData);
+      if (clientData['name'] != null) {
+        request.fields['name'] = clientData['name'];
+      }
+      if (clientData['phone'] != null) {
+        request.fields['phone'] = clientData['phone'];
+      }
+      if (clientData['email'] != null) {
+        request.fields['email'] = clientData['email'];
+      }
+      if (clientData['companyName'] != null) {
+        request.fields['companyName'] = clientData['companyName'];
+      }
+      if (clientData['website'] != null) {
+        request.fields['website'] = clientData['website'];
+      }
     }
 
     request.files.add(
@@ -1441,7 +1466,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final clientData = AuthService.getClientData();
     if (clientData != null) {
-      request.fields['clientData'] = jsonEncode(clientData);
+      if (clientData['name'] != null) {
+        request.fields['name'] = clientData['name'];
+      }
+      if (clientData['phone'] != null) {
+        request.fields['phone'] = clientData['phone'];
+      }
+      if (clientData['email'] != null) {
+        request.fields['email'] = clientData['email'];
+      }
+      if (clientData['companyName'] != null) {
+        request.fields['companyName'] = clientData['companyName'];
+      }
+      if (clientData['website'] != null) {
+        request.fields['website'] = clientData['website'];
+      }
     }
 
     request.files.add(
@@ -1503,7 +1542,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final clientData = AuthService.getClientData();
     if (clientData != null) {
-      request.fields['clientData'] = jsonEncode(clientData);
+      if (clientData['name'] != null) {
+        request.fields['name'] = clientData['name'];
+      }
+      if (clientData['phone'] != null) {
+        request.fields['phone'] = clientData['phone'];
+      }
+      if (clientData['email'] != null) {
+        request.fields['email'] = clientData['email'];
+      }
+      if (clientData['companyName'] != null) {
+        request.fields['companyName'] = clientData['companyName'];
+      }
+      if (clientData['website'] != null) {
+        request.fields['website'] = clientData['website'];
+      }
     }
 
     final fileInfo = AttachmentService.getFileInfo(message.documentFile!);
@@ -1563,7 +1616,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final clientData = AuthService.getClientData();
     if (clientData != null) {
-      request.fields['clientData'] = jsonEncode(clientData);
+      if (clientData['name'] != null) {
+        request.fields['name'] = clientData['name'];
+      }
+      if (clientData['phone'] != null) {
+        request.fields['phone'] = clientData['phone'];
+      }
+      if (clientData['email'] != null) {
+        request.fields['email'] = clientData['email'];
+      }
+      if (clientData['companyName'] != null) {
+        request.fields['companyName'] = clientData['companyName'];
+      }
+      if (clientData['website'] != null) {
+        request.fields['website'] = clientData['website'];
+      }
     }
 
     // Get video filename
@@ -2560,24 +2627,32 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Custom Header
-            _buildHeader(),
+      resizeToAvoidBottomInset: true,
+      body: Column(
+        children: [
+          // Custom Header
+          SafeArea(
+            bottom: false,
+            child: _buildHeader(),
+          ),
 
             // Chat messages
             Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(16),
-                itemCount: _messages.length + (_isLoading ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == _messages.length && _isLoading) {
-                    return TypingIndicator(isUploadingFile: _isUploadingFile);
-                  }
-                  return ChatBubble(message: _messages[index]);
-                },
+              child: GestureDetector(
+                onTap: () => FocusScope.of(context).unfocus(),
+                behavior: HitTestBehavior.opaque,
+                child: ListView.builder(
+                  controller: _scrollController,
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _messages.length + (_isLoading ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == _messages.length && _isLoading) {
+                      return TypingIndicator(isUploadingFile: _isUploadingFile);
+                    }
+                    return ChatBubble(message: _messages[index]);
+                  },
+                ),
               ),
             ),
 
@@ -2612,15 +2687,16 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             // Message input
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: Colors.grey, width: 0.5)),
-              ),
-              child: SafeArea(
+            SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Colors.grey, width: 0.5)),
+                ),
                 child: Row(
-                  children: [
+                children: [
                     Expanded(
                       child: Container(
                         decoration: BoxDecoration(
@@ -2654,6 +2730,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 child: TextField(
                                   controller: _messageController,
                                   onChanged: _onTextChanged,
+                                  onTap: _onTextFieldTapped,
                                   enabled: !_isLoading,
                                   decoration: InputDecoration(
                                     hintText:
@@ -2735,7 +2812,6 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 }
