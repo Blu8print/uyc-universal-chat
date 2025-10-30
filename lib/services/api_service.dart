@@ -270,7 +270,7 @@ class ApiService {
             lastActivity: sessionJson['last_modified'] ?? sessionJson['created_at'],
             messageCount: 0, // Not provided by server
             createdAt: sessionJson['created_at'],
-            chatType: sessionJson['chat_type'],
+            chatType: sessionJson['chat_type'] ?? sessionJson['chatType'],
             emailSent: sessionJson['email_sent'] ?? sessionJson['emailSent'] ?? false,
           )).toList();
           

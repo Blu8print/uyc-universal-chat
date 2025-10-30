@@ -1733,6 +1733,9 @@ class _ChatScreenState extends State<ChatScreen> {
       case 'forward_conversation':
         _sendEmail();
         break;
+      case 'conversation_info':
+        _showConversationInfo();
+        break;
       case 'clear_conversation':
         _clearConversation();
         break;
@@ -1843,6 +1846,103 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
           ),
+    );
+  }
+
+  Future<void> _showConversationInfo() async {
+    final user = await StorageService.getUser();
+    final sessionData = SessionService.currentSessionData;
+
+    if (sessionData == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Geen sessie informatie beschikbaar'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    String formatDate(String? isoDate) {
+      if (isoDate == null || isoDate.isEmpty) return 'Onbekend';
+      try {
+        final date = DateTime.parse(isoDate);
+        return '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}';
+      } catch (e) {
+        return 'Onbekende datum';
+      }
+    }
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text(
+            'Gesprek Informatie',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildInfoRow('Bedrijfsnaam', user?.companyName ?? 'Onbekend'),
+                const SizedBox(height: 12),
+                _buildInfoRow('Naam', user?.name ?? 'Onbekend'),
+                const SizedBox(height: 12),
+                _buildInfoRow('Sessie ID', sessionData.sessionId),
+                const SizedBox(height: 12),
+                _buildInfoRow('Titel', sessionData.title.isNotEmpty ? sessionData.title : 'Geen titel'),
+                const SizedBox(height: 12),
+                _buildInfoRow('Omschrijving', sessionData.description.isNotEmpty ? sessionData.description : 'Geen omschrijving', maxLines: null),
+                const SizedBox(height: 12),
+                _buildInfoRow('Chattype', sessionData.chatType ?? 'Onbekend'),
+                const SizedBox(height: 12),
+                _buildInfoRow('Aangemaakt op', formatDate(sessionData.createdAt)),
+                const SizedBox(height: 12),
+                _buildInfoRow('Laatst gewijzigd', formatDate(sessionData.lastActivity)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Sluiten'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildInfoRow(String label, String value, {int? maxLines = 1}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.grey,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Colors.black87,
+          ),
+          maxLines: maxLines,
+          overflow: maxLines != null ? TextOverflow.ellipsis : TextOverflow.visible,
+        ),
+      ],
     );
   }
 
@@ -2249,6 +2349,25 @@ class _ChatScreenState extends State<ChatScreen> {
                           SizedBox(width: 12),
                           Text(
                             'Gesprek doorsturen',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'conversation_info',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.grey, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Gesprek Informatie',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.black87,
