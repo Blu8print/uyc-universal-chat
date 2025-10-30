@@ -777,7 +777,9 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
                           ),
                         const SizedBox(height: 4),
                         Text(
-                          session.title,
+                          (session.title.startsWith('newsession_') || session.title.startsWith('session_'))
+                              ? _formatChatType(session.chatType)
+                              : session.title,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -826,6 +828,22 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
       return '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}';
     } catch (e) {
       return 'Onbekende datum';
+    }
+  }
+
+  String _formatChatType(String? chatType) {
+    if (chatType == null) return 'Chat';
+
+    switch (chatType) {
+      case 'project_doorgeven':
+        return 'Project doorgeven';
+      case 'vakkennis_delen':
+        return 'Vakkennis delen';
+      case 'social_media':
+        return 'Social media';
+      default:
+        // Fallback: capitalize and replace underscores with spaces
+        return chatType.replaceAll('_', ' ');
     }
   }
 

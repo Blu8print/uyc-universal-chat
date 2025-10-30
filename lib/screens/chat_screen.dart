@@ -1992,7 +1992,9 @@ class _ChatScreenState extends State<ChatScreen> {
         print('DEBUG: Current _chatType value: $_chatType');
         print('DEBUG: Widget mounted: $mounted');
 
-        if (sessionTitle != null && sessionTitle.isNotEmpty) {
+        if (sessionTitle != null && sessionTitle.isNotEmpty &&
+            !sessionTitle.startsWith('newsession_') &&
+            !sessionTitle.startsWith('session_')) {
           print('DEBUG: Updating chat title to: $sessionTitle');
           if (mounted) {
             setState(() {
@@ -2340,15 +2342,15 @@ class _ChatScreenState extends State<ChatScreen> {
             itemBuilder:
                 (BuildContext context) => [
                   PopupMenuItem<String>(
-                    value: 'forward_conversation',
+                    value: 'conversation_info',
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: const Row(
                         children: [
-                          Icon(Icons.mail, color: Colors.grey, size: 20),
+                          Icon(Icons.info_outline, color: Colors.grey, size: 20),
                           SizedBox(width: 12),
                           Text(
-                            'Gesprek doorsturen',
+                            'Gesprek Informatie',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.black87,
@@ -2359,15 +2361,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   PopupMenuItem<String>(
-                    value: 'conversation_info',
+                    value: 'forward_conversation',
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: const Row(
                         children: [
-                          Icon(Icons.info_outline, color: Colors.grey, size: 20),
+                          Icon(Icons.mail, color: Colors.grey, size: 20),
                           SizedBox(width: 12),
                           Text(
-                            'Gesprek Informatie',
+                            'Gesprek doorsturen',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.black87,
@@ -2396,6 +2398,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ),
                   ),
+                  const PopupMenuDivider(),
                   PopupMenuItem<String>(
                     value: 'help_support',
                     child: Container(
@@ -2415,7 +2418,6 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ),
                   ),
-                  const PopupMenuDivider(),
                   PopupMenuItem<String>(
                     value: 'call_kwaaijongens',
                     child: Container(

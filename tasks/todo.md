@@ -1,250 +1,138 @@
-# Add Email Sent Checkmark to Sessions
+# Filter Session Titles in Start Screen Session List
 
 ## Problem
-Need to add a visual indicator (checkmark) to sessions in the start screen list when an email has been sent for that session. Also need to add an `emailSent` flag to sessions for future use.
+Session titles in the start screen list currently display raw values like "newsession_xyz" or "session_123". We need to apply the same filtering logic as chat_screen.dart: when a title starts with "newsession_" or "session_", display the chatType instead (formatted for readability).
 
-## Solution Tasks
+## Investigation Findings
 
-- [x] Add `emailSent` property to SessionData model
-- [x] Add `markCurrentSessionEmailSent` method to SessionService
-- [x] Call `markCurrentSessionEmailSent` after successful email send
-- [x] Display checkmark in session list UI
-- [x] Update tasks/todo.md with review
-
-## Changes Implemented
-
-### 1. Added `emailSent` Property to SessionData Model
-**File**: `/Users/sebastiaan/Development/projects/my_flutter_app/lib/services/api_service.dart` (lines 624-673)
-
-- Added `final bool emailSent;` property to SessionData class (line 633)
-- Updated constructor with `this.emailSent = false` default value (line 644)
-- Added `'emailSent': emailSent` to `toJson()` method (line 657)
-- Added `emailSent: json['emailSent'] ?? false` to `fromJson()` factory (line 671)
-
-**Impact**: Sessions can now track whether an email has been sent. Default is false for backward compatibility.
-
-### 2. Added Method to Mark Session as Email Sent
-**File**: `/Users/sebastiaan/Development/projects/my_flutter_app/lib/services/session_service.dart` (lines 188-223)
-
-Created `markCurrentSessionEmailSent()` method that:
-- Checks if current session exists
-- Creates updated SessionData with `emailSent = true`
-- Updates `_currentSessionData` in memory
-- Saves to local storage via `StorageService.saveSessionData()`
-- Updates session in `_sessionList` to keep it synced
-- Saves updated session list to storage
-
-**Impact**: Provides simple, centralized method to mark a session as having sent an email.
-
-### 3. Set Flag After Successful Email Send
-**File**: `/Users/sebastiaan/Development/projects/my_flutter_app/lib/screens/chat_screen.dart` (lines 1675-1676)
-
-- Added `await SessionService.markCurrentSessionEmailSent();` call after successful email response
-- Called immediately after adding the success message to chat
-- Simple one-line addition
-
-**Impact**: Sessions are automatically flagged when emails are successfully sent.
-
-### 4. Display Checkmark in Session List UI
-**File**: `/Users/sebastiaan/Development/projects/my_flutter_app/lib/screens/start_screen.dart` (lines 771-788)
-
-Added positioned checkmark indicator:
-- Shows only when `session.emailSent == true`
-- Positioned at top-right corner (top: 4, right: 4)
-- Green circular badge (`Color(0xFF10B981)`)
-- White checkmark icon (size: 16)
-- Rounded corners (borderRadius: 12)
-
-**Impact**: Visual indicator clearly shows which sessions have had emails sent.
-
-## How It Works
-
-1. **Session Creation**: New sessions are created with `emailSent = false` by default
-2. **Email Sending**: When user sends email via "Versturen" button and it succeeds:
-   - Email response is added to chat
-   - `markCurrentSessionEmailSent()` is called
-   - Session data is updated with `emailSent = true`
-   - Updated data is persisted to storage
-3. **UI Display**: Start screen loads sessions and displays green checkmark badge on sessions where `emailSent == true`
-4. **Persistence**: Flag survives app restarts and is stored in both session data and session list
-
-## Testing Recommendations
-
-1. **Primary flow**:
-   - Start new session from action button
-   - Send an email using "Versturen" button
-   - Wait for success response
-   - Navigate back to start screen
-   - **Expected**: Green checkmark appears on the session
-
-2. **Persistence test**:
-   - Follow primary flow
-   - Close and reopen app
-   - **Expected**: Checkmark still visible on the session
-
-3. **Multiple sessions**:
-   - Create 3 sessions
-   - Send email from only 2 of them
-   - Return to start screen
-   - **Expected**: Only the 2 sessions with sent emails show checkmarks
-
-4. **Email failure**:
-   - Send email but trigger an error (disconnect network)
-   - Navigate back to start screen
-   - **Expected**: No checkmark appears (only successful sends get flagged)
-
-5. **Open existing session**:
-   - Open a session that has checkmark
-   - Verify chat history shows the email was sent
-   - **Expected**: History matches the checkmark indicator
-
-## Future Use
-
-The `emailSent` flag can be used for:
-- Analytics (track how many sessions result in emails)
-- Filtering (show only sessions with/without sent emails)
-- Workflow management (require email before closing session)
-- Backend sync (update backend when emails are sent)
-- Notifications (remind user to send email if not sent)
-
-## Additional Notes
-
-- **Simple, minimal changes**: Each change was isolated and straightforward
-- **Backward compatible**: Existing sessions without the flag default to `false`
-- **No backend changes required**: All persistence is local
-- **Reusable pattern**: Same approach can be used for other session flags
-- **UI is non-intrusive**: Small badge doesn't interfere with existing UI
-- **Consistent with app style**: Uses app's color scheme and design patterns
-
-## Review Summary
-
-Successfully implemented email sent indicator feature with 4 simple, focused changes:
-1. Data model enhancement (SessionData)
-2. Service layer method (SessionService)
-3. Business logic integration (chat_screen.dart)
-4. UI presentation (start_screen.dart)
-
-All changes follow the principle of simplicity - each modification is minimal and impacts as little code as possible.
-
----
-
-# Fix Email Sent Checkmark Display & Backend Integration
-
-## Problem
-The email sent checkmark was not appearing on the start screen, even though the feature was previously implemented. Additionally, the `emailSent` flag needed to be sent to the backend webhook for persistence in the database.
-
-## Root Cause
-1. **Missing Field Parsing**: The `listSessions` method in `api_service.dart` was not parsing the `emailSent` field from server responses. When sessions were synced from the backend, all sessions defaulted to `emailSent = false`, overwriting any local values.
-2. **No Backend Sync**: The `emailSent` flag was only stored locally and not sent to the webhook at `https://automation.kwaaijongens.nl/webhook/sessions`.
-
-## Solution Tasks
-- [x] Parse emailSent in first SessionData construction in listSessions
-- [x] Parse emailSent in second SessionData construction in listSessions
-- [x] Add emailSent parameter to updateSession method signature
-- [x] Add emailSent to webhook request body in updateSession
-- [x] Update markCurrentSessionEmailSent to call updateSession with emailSent flag
-
-## Changes Implemented
-
-### 1. Parse emailSent from Server Responses
-**File**: `lib/services/api_service.dart:274` and `lib/services/api_service.dart:298`
-
-Added emailSent field parsing in both SessionData construction locations:
+### 1. Session Title Display Location
+- **File**: `/Users/sebastiaan/Development/projects/my_flutter_app/lib/screens/start_screen.dart`
+- **Line**: 779 (within `_buildSessionItem` method starting at line 642)
+- **Current code**:
 ```dart
-emailSent: sessionJson['email_sent'] ?? sessionJson['emailSent'] ?? false,
+Text(
+  session.title,
+  style: const TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    color: Colors.white,
+  ),
+  maxLines: 1,
+  overflow: TextOverflow.ellipsis,
+),
 ```
 
-**Impact**: Sessions now correctly parse and preserve the emailSent flag from backend responses. Supports both snake_case (`email_sent`) and camelCase (`emailSent`) formats.
+### 2. Available chatType Values
+- `'project_doorgeven'` → Should display as "Project doorgeven"
+- `'vakkennis_delen'` → Should display as "Vakkennis delen"
+- `'social_media'` → Should display as "Social media"
 
-### 2. Add emailSent to updateSession Method
-**File**: `lib/services/api_service.dart:340`
+### 3. Current Chat Screen Logic (Reference)
+**File**: `/Users/sebastiaan/Development/projects/my_flutter_app/lib/screens/chat_screen.dart`
+**Lines**: 1995-2001
 
-- Added `bool? emailSent` parameter to method signature
-- Changed requestBody type to `Map<String, dynamic>` to support boolean values (line 346)
-- Added emailSent to request body when provided (line 356)
+Filters titles starting with "newsession_" or "session_" but keeps default "Chat" value (does NOT use chatType as fallback). Our implementation will be different - we WILL use chatType as fallback.
 
-**Impact**: The updateSession method can now send the emailSent flag to the webhook backend.
+## Solution Plan
 
-### 3. Parse emailSent from Update Responses
-**File**: `lib/services/api_service.dart:385` and `lib/services/api_service.dart:404`
+### Task List
+- [ ] Add helper method `_formatChatType` to format chatType values for display
+- [ ] Update Text widget at line 779 to conditionally show formatted chatType when title should be filtered
+- [ ] Test with different session types to verify display
 
-Added emailSent parsing in both response handlers:
+### Implementation Details
+
+#### 1. Add Helper Method `_formatChatType`
+**Location**: In `_StartScreenState` class in start_screen.dart (around line 830, after `_formatDate` method)
+
+**Method**:
 ```dart
-emailSent: responseData['email_sent'] ?? responseData['emailSent'] ?? emailSent ?? false,
-```
-
-**Impact**: Updated sessions correctly reflect the emailSent status from server responses.
-
-### 4. Send emailSent to Backend When Marking Session
-**File**: `lib/services/session_service.dart:221-231`
-
-Added webhook call in `markCurrentSessionEmailSent()` method:
-```dart
-// Send emailSent flag to backend webhook
-final user = await StorageService.getUser();
-if (user != null) {
-  await ApiService.updateSession(
-    sessionId: _currentSessionId!,
-    phoneNumber: user.phoneNumber,
-    name: user.name,
-    companyName: user.companyName,
-    emailSent: true,
-  );
-  print('[SessionService] Email sent flag updated on backend');
+String _formatChatType(String? chatType) {
+  if (chatType == null) return 'Chat';
+  
+  switch (chatType) {
+    case 'project_doorgeven':
+      return 'Project doorgeven';
+    case 'vakkennis_delen':
+      return 'Vakkennis delen';
+    case 'social_media':
+      return 'Social media';
+    default:
+      // Fallback: capitalize and replace underscores with spaces
+      return chatType.replaceAll('_', ' ');
+  }
 }
 ```
 
-**Impact**: When an email is sent, the backend webhook is notified and can store the flag in the database.
+**Reasoning**: Simple switch statement matching the action button titles. Default fallback handles unknown values gracefully.
 
-## How It Works Now
+#### 2. Update Text Widget Display Logic
+**Location**: Line 779 in start_screen.dart
 
-1. **When Email is Sent** (chat_screen.dart):
-   - User clicks "Versturen" button
-   - Email is sent successfully
-   - `SessionService.markCurrentSessionEmailSent()` is called
+**Change from**:
+```dart
+Text(
+  session.title,
+  style: const TextStyle(...),
+  ...
+),
+```
 
-2. **Local and Remote Updates** (session_service.dart):
-   - Local session data updated with `emailSent = true`
-   - Saved to local storage
-   - Backend webhook called via `ApiService.updateSession(emailSent: true)`
-   - Backend stores flag in database
+**Change to**:
+```dart
+Text(
+  (session.title.startsWith('newsession_') || session.title.startsWith('session_'))
+    ? _formatChatType(session.chatType)
+    : session.title,
+  style: const TextStyle(...),
+  ...
+),
+```
 
-3. **Session List Sync** (api_service.dart):
-   - When fetching sessions, `emailSent` field is parsed from server response
-   - Sessions maintain correct `emailSent` status
-   - Checkmark displays for sessions with `emailSent = true`
+**Reasoning**: Same filtering logic as chat_screen.dart (lines 1996-1997), but uses formatted chatType as fallback instead of generic "Chat".
 
-4. **Checkmark Display** (start_screen.dart):
-   - Green checkmark badge appears on sessions where `session.emailSent == true`
-   - Positioned at top-right corner of session cards
+## Expected Behavior After Changes
 
-## Testing Recommendations
+### Before
+- Session with title "newsession_1698765432" displays as "newsession_1698765432"
+- Session with title "session_1698765432" displays as "session_1698765432"
+- Session with proper title "My Project" displays as "My Project"
 
-1. **Full Flow Test**:
-   - Create new session and send email
-   - Verify checkmark appears
-   - Close and reopen app
-   - Verify checkmark still appears (backend persistence)
+### After
+- Session with title "newsession_1698765432" and chatType "project_doorgeven" displays as "Project doorgeven"
+- Session with title "session_1698765432" and chatType "vakkennis_delen" displays as "Vakkennis delen"
+- Session with proper title "My Project" displays as "My Project" (no change)
+- Session with filtered title but no chatType displays as "Chat" (fallback)
 
-2. **Sync Test**:
-   - Send email from device A
-   - Open app on device B (if multi-device supported)
-   - Verify checkmark appears after sync
+## Testing Plan
 
-3. **Backend Verification**:
-   - Check webhook logs at `https://automation.kwaaijongens.nl/webhook/sessions`
-   - Verify `emailSent: true` is being received
-   - Check database to confirm storage
+1. **Test filtered title with chatType**:
+   - Create new session via "Project doorgeven" button
+   - Return to start screen before backend assigns real title
+   - **Expected**: Display shows "Project doorgeven"
 
-## Review Summary
+2. **Test filtered title without chatType**:
+   - Find/create session with title starting with "newsession_" but no chatType
+   - **Expected**: Display shows "Chat"
 
-Successfully fixed the email sent checkmark display issue with 3 files modified:
-1. **api_service.dart**: Parse emailSent from responses + send to webhook (7 changes)
-2. **session_service.dart**: Call webhook when marking email as sent (1 change)
-3. All changes minimal and focused on specific functionality
+3. **Test normal title**:
+   - Open session with real title like "Website Development"
+   - **Expected**: Display shows "Website Development"
 
-The feature now works end-to-end:
-- ✅ Checkmark displays correctly
-- ✅ Data persists locally
-- ✅ Data syncs to backend
-- ✅ Backend can store in database
+4. **Test all chatType values**:
+   - Create sessions for all 3 action types
+   - Verify each shows correct formatted label
+
+## Files to Modify
+1. `/Users/sebastiaan/Development/projects/my_flutter_app/lib/screens/start_screen.dart` - Add helper method and update display logic
+
+## Principles Applied
+- **Simple**: Only 2 small changes (1 new method, 1 line modification)
+- **Minimal impact**: Only touches session list display logic
+- **Consistent**: Uses same filtering logic as chat_screen.dart
+- **Defensive**: Handles missing chatType gracefully with fallback
+- **User-friendly**: Formats chatType values to match UI button text
+
+---
+
+**Ready for review and approval before implementation.**
