@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import 'storage_service.dart';
 import 'api_service.dart';
@@ -17,7 +18,7 @@ class AuthService {
       _currentUser = await StorageService.getUser();
       return _currentUser != null;
     } catch (e) {
-      print('Error initializing auth: $e');
+      debugPrint('Error initializing auth: $e');
       return false;
     }
   }

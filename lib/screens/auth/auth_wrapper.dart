@@ -40,7 +40,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         });
       }
     } catch (e) {
-      print('Error checking auth status: $e');
+      debugPrint('Error checking auth status: $e');
       setState(() {
         _isAuthenticated = false;
         _isLoading = false;
@@ -112,7 +112,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         });
       }
     } catch (e) {
-      print('Error during version check: $e');
+      debugPrint('Error during version check: $e');
       // On error, continue to chat (fail gracefully)
       setState(() {
         _isAuthenticated = true;

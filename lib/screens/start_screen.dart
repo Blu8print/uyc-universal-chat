@@ -111,7 +111,7 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      print('Error loading sessions: $e');
+      debugPrint('Error loading sessions: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -154,7 +154,7 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      print('Error refreshing sessions: $e');
+      debugPrint('Error refreshing sessions: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -244,11 +244,11 @@ class _StartScreenState extends State<StartScreen> with WidgetsBindingObserver {
         await SessionService.syncSessionList();
         return true;
       } else {
-        print('Failed to delete session: ${response.statusCode}');
+        debugPrint('Failed to delete session: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('Error deleting session: $e');
+      debugPrint('Error deleting session: $e');
       return false;
     }
   }

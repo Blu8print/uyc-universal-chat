@@ -13,7 +13,7 @@ void main() async {
     // Register background message handler
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (e) {
-    print('Firebase initialization error: $e');
+    debugPrint('Firebase initialization error: $e');
   }
   
   runApp(const MyApp());

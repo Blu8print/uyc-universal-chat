@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import 'api_service.dart';
@@ -20,7 +21,7 @@ class StorageService {
       
       return true;
     } catch (e) {
-      print('Error saving user: $e');
+      debugPrint('Error saving user: $e');
       return false;
     }
   }
@@ -37,7 +38,7 @@ class StorageService {
       }
       return null;
     } catch (e) {
-      print('Error loading user: $e');
+      debugPrint('Error loading user: $e');
       return null;
     }
   }
@@ -48,7 +49,7 @@ class StorageService {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool(_isLoggedInKey) ?? false;
     } catch (e) {
-      print('Error checking login status: $e');
+      debugPrint('Error checking login status: $e');
       return false;
     }
   }
@@ -61,7 +62,7 @@ class StorageService {
       await prefs.setBool(_isLoggedInKey, false);
       return true;
     } catch (e) {
-      print('Error clearing user: $e');
+      debugPrint('Error clearing user: $e');
       return false;
     }
   }
@@ -73,7 +74,7 @@ class StorageService {
       await prefs.clear();
       return true;
     } catch (e) {
-      print('Error clearing all data: $e');
+      debugPrint('Error clearing all data: $e');
       return false;
     }
   }
@@ -86,7 +87,7 @@ class StorageService {
       await prefs.setString('messages_$sessionId', messagesJson);
       return true;
     } catch (e) {
-      print('Error saving messages: $e');
+      debugPrint('Error saving messages: $e');
       return false;
     }
   }
@@ -103,7 +104,7 @@ class StorageService {
       }
       return [];
     } catch (e) {
-      print('Error loading messages: $e');
+      debugPrint('Error loading messages: $e');
       return [];
     }
   }
@@ -115,7 +116,7 @@ class StorageService {
       await prefs.remove('messages_$sessionId');
       return true;
     } catch (e) {
-      print('Error clearing messages: $e');
+      debugPrint('Error clearing messages: $e');
       return false;
     }
   }
@@ -128,7 +129,7 @@ class StorageService {
       await prefs.setString('$_sessionDataKey${sessionData.sessionId}', sessionJson);
       return true;
     } catch (e) {
-      print('Error saving session data: $e');
+      debugPrint('Error saving session data: $e');
       return false;
     }
   }
@@ -145,7 +146,7 @@ class StorageService {
       }
       return null;
     } catch (e) {
-      print('Error loading session data: $e');
+      debugPrint('Error loading session data: $e');
       return null;
     }
   }
@@ -158,7 +159,7 @@ class StorageService {
       await prefs.setString(_sessionListKey, sessionsJson);
       return true;
     } catch (e) {
-      print('Error saving session list: $e');
+      debugPrint('Error saving session list: $e');
       return false;
     }
   }
@@ -175,7 +176,7 @@ class StorageService {
       }
       return [];
     } catch (e) {
-      print('Error loading session list: $e');
+      debugPrint('Error loading session list: $e');
       return [];
     }
   }
@@ -187,7 +188,7 @@ class StorageService {
       await prefs.remove('$_sessionDataKey$sessionId');
       return true;
     } catch (e) {
-      print('Error clearing session data: $e');
+      debugPrint('Error clearing session data: $e');
       return false;
     }
   }
@@ -209,7 +210,7 @@ class StorageService {
       
       return true;
     } catch (e) {
-      print('Error clearing all session data: $e');
+      debugPrint('Error clearing all session data: $e');
       return false;
     }
   }
@@ -246,7 +247,7 @@ class StorageService {
         'averageMessageSizePerSession': messageKeys > 0 ? totalMessageSize / messageKeys : 0,
       };
     } catch (e) {
-      print('Error getting storage stats: $e');
+      debugPrint('Error getting storage stats: $e');
       return {
         'sessionCount': 0,
         'messageSessionCount': 0,

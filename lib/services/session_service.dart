@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'storage_service.dart';
@@ -31,7 +32,7 @@ class SessionService {
   // Start new session with backend sync
   static Future<String> startNewSession({String? chatType}) async {
     _currentSessionId = _generateSessionId();
-    print('[SessionService] Creating new session: $_currentSessionId${chatType != null ? " (chatType: $chatType)" : ""}');
+    debugPrint('[SessionService] Creating new session: $_currentSessionId${chatType != null ? " (chatType: $chatType)" : ""}');
     await _saveSessionId(_currentSessionId!);
 
     // Try to create session on backend
@@ -48,14 +49,14 @@ class SessionService {
 
       // If no session exists, create a new one
       if (_currentSessionId == null) {
-        print('[SessionService] No existing session found, creating new one');
+        debugPrint('[SessionService] No existing session found, creating new one');
         await startNewSession();
       } else {
         // Load session data for existing session
         _currentSessionData = await StorageService.loadSessionData(_currentSessionId!);
       }
     } catch (e) {
-      print('Error loading session: $e');
+      debugPrint('Error loading session: $e');
       // Fallback to new session
       await startNewSession();
     }
@@ -67,7 +68,7 @@ class SessionService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_sessionIdKey, sessionId);
     } catch (e) {
-      print('Error saving session ID: $e');
+      debugPrint('Error saving session ID: $e');
     }
   }
   
@@ -79,13 +80,13 @@ class SessionService {
   // Clear session data
   static Future<void> clearSession() async {
     try {
-      print('[SessionService] Clearing current session: $_currentSessionId');
+      debugPrint('[SessionService] Clearing current session: $_currentSessionId');
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_sessionIdKey);
       _currentSessionId = null;
       _currentSessionData = null;
     } catch (e) {
-      print('Error clearing session: $e');
+      debugPrint('Error clearing session: $e');
     }
   }
   
@@ -106,11 +107,11 @@ class SessionService {
           _currentSessionData = response.sessionData;
           await StorageService.saveSessionData(response.sessionData!);
         } else {
-          print('Failed to create session on backend: ${response.message}');
+          debugPrint('Failed to create session on backend: ${response.message}');
         }
       }
     } catch (e) {
-      print('Error creating session on backend: $e');
+      debugPrint('Error creating session on backend: $e');
     }
   }
   
@@ -130,13 +131,13 @@ class SessionService {
           await StorageService.saveSessionList(_sessionList);
           return true;
         } else {
-          print('Failed to sync session list: ${response.message}');
+          debugPrint('Failed to sync session list: ${response.message}');
           return false;
         }
       }
       return false;
     } catch (e) {
-      print('Error syncing session list: $e');
+      debugPrint('Error syncing session list: $e');
       return false;
     }
   }
@@ -148,7 +149,7 @@ class SessionService {
       // Sort cached sessions by date (most recent first)
       _sortSessionsByDate(_sessionList);
     } catch (e) {
-      print('Error loading session list from cache: $e');
+      debugPrint('Error loading session list from cache: $e');
       _sessionList = [];
     }
   }
@@ -174,13 +175,13 @@ class SessionService {
           await StorageService.saveSessionData(response.sessionData!);
           return true;
         } else {
-          print('Failed to update session: ${response.message}');
+          debugPrint('Failed to update session: ${response.message}');
           return false;
         }
       }
       return false;
     } catch (e) {
-      print('Error updating session: $e');
+      debugPrint('Error updating session: $e');
       return false;
     }
   }
@@ -190,7 +191,7 @@ class SessionService {
     if (_currentSessionId == null || _currentSessionData == null) return;
 
     try {
-      print('[SessionService] Marking session as email sent: $_currentSessionId');
+      debugPrint('[SessionService] Marking session as email sent: $_currentSessionId');
 
       // Create updated session data with emailSent flag
       final updatedSessionData = SessionData(
@@ -228,10 +229,10 @@ class SessionService {
           companyName: user.companyName,
           emailSent: true,
         );
-        print('[SessionService] Email sent flag updated on backend');
+        debugPrint('[SessionService] Email sent flag updated on backend');
       }
     } catch (e) {
-      print('[SessionService] Error marking session as email sent: $e');
+      debugPrint('[SessionService] Error marking session as email sent: $e');
     }
   }
 
@@ -266,13 +267,13 @@ class SessionService {
           
           return true;
         } else {
-          print('Failed to delete session: ${response.message}');
+          debugPrint('Failed to delete session: ${response.message}');
           return false;
         }
       }
       return false;
     } catch (e) {
-      print('Error deleting session: $e');
+      debugPrint('Error deleting session: $e');
       return false;
     }
   }
@@ -280,7 +281,7 @@ class SessionService {
   // Switch to different session
   static Future<bool> switchToSession(String sessionId) async {
     try {
-      print('[SessionService] Switching to existing session: $sessionId');
+      debugPrint('[SessionService] Switching to existing session: $sessionId');
       // Save current session ID
       _currentSessionId = sessionId;
       await _saveSessionId(sessionId);
@@ -300,7 +301,7 @@ class SessionService {
       
       return true;
     } catch (e) {
-      print('Error switching session: $e');
+      debugPrint('Error switching session: $e');
       return false;
     }
   }
@@ -313,7 +314,7 @@ class SessionService {
     // Try to sync with backend in background
     syncSessionList().then((success) {
       if (success) {
-        print('Session list synced successfully');
+        debugPrint('Session list synced successfully');
       }
     });
   }

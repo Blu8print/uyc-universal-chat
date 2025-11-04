@@ -191,14 +191,14 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     } catch (e) {
-      print('Firebase Messaging initialization failed: $e');
+      debugPrint('Firebase Messaging initialization failed: $e');
     }
   }
 
   Future<void> _requestInitialPermissions() async {
-    print('DEBUG: Requesting initial permissions...');
+    debugPrint('DEBUG: Requesting initial permissions...');
     final result = await _audioService.requestPermission();
-    print('DEBUG: Initial permission result: $result');
+    debugPrint('DEBUG: Initial permission result: $result');
   }
 
   Future<void> _initializeWelcomeMessage() async {
@@ -221,7 +221,7 @@ class _ChatScreenState extends State<ChatScreen> {
         final sessionData = SessionService.currentSessionData;
         if (sessionData != null && sessionData.chatType != null) {
           _chatType = sessionData.chatType;
-          print('DEBUG: Loaded chatType from SessionData: $_chatType');
+          debugPrint('DEBUG: Loaded chatType from SessionData: $_chatType');
         }
 
         setState(() {
@@ -304,7 +304,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom();
       }
     } catch (e) {
-      print('Error handling FCM message: $e');
+      debugPrint('Error handling FCM message: $e');
     }
   }
 
@@ -363,58 +363,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _sendToN8n(String message) async {
-    try {
-      final response = await http
-          .post(
-            Uri.parse(_n8nChatUrl),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': _getBasicAuthHeader(),
-              'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-            },
-            body: jsonEncode({
-              'action': 'sendMessage',
-              'sessionId': SessionService.currentSessionId ?? 'no-session',
-              'chatInput': message,
-              'clientData': AuthService.getClientData(),
-            }),
-          )
-          .timeout(const Duration(seconds: 30));
-
-      // Log response details for debugging
-
-      if (response.statusCode == 200) {
-        String botResponse = _parseWebhookResponse(
-          response.body,
-          'Geen reactie ontvangen',
-        );
-
-        // Add bot response
-        await _addMessage(
-          ChatMessage(
-            text: botResponse,
-            isCustomer: false,
-            timestamp: DateTime.now(),
-          ),
-        );
-
-        // Show send to team banner after AI response
-        _displaySendToTeamBanner();
-
-        // Fetch updated chat title
-        _fetchChatTitle();
-      } else {
-        _addErrorMessage('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      // Error sending to n8n: $e
-      await _addErrorMessage(
-        'Sorry, er ging iets mis. Controleer je internetverbinding en probeer het opnieuw.',
-      );
-    }
-  }
 
   Future<void> _addErrorMessage(String errorText) async {
     await _addMessage(
@@ -446,12 +394,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (response.statusCode == 200) {
         // Debug logging
-        print('Audio response headers: ${response.headers}');
-        print(
+        debugPrint('Audio response headers: ${response.headers}');
+        debugPrint(
           'Audio response content-type: ${response.headers['content-type']}',
         );
-        print('Audio response body length: ${response.bodyBytes.length}');
-        print(
+        debugPrint('Audio response body length: ${response.bodyBytes.length}');
+        debugPrint(
           'Audio response first 100 bytes: ${response.bodyBytes.take(100).toList()}',
         );
 
@@ -465,7 +413,7 @@ class _ChatScreenState extends State<ChatScreen> {
         // Verify file was written
         final fileExists = await audioFile.exists();
         final fileSize = await audioFile.length();
-        print(
+        debugPrint(
           'Audio file saved: $fileExists, size: $fileSize bytes, path: ${audioFile.path}',
         );
 
@@ -482,13 +430,13 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
 
-        print('Audio message added with autoPlay: true');
+        debugPrint('Audio message added with autoPlay: true');
       } else {
-        print('Audio generation failed with status: ${response.statusCode}');
+        debugPrint('Audio generation failed with status: ${response.statusCode}');
       }
     } catch (e, stackTrace) {
-      print('Error generating audio: $e');
-      print('Stack trace: $stackTrace');
+      debugPrint('Error generating audio: $e');
+      debugPrint('Stack trace: $stackTrace');
     }
   }
 
@@ -498,12 +446,12 @@ class _ChatScreenState extends State<ChatScreen> {
       _showSendToTeamBanner = false;
     });
 
-    print('DEBUG: Starting recording...');
+    debugPrint('DEBUG: Starting recording...');
     final hasPermission = await _audioService.requestPermission();
-    print('DEBUG: Recording permission granted: $hasPermission');
+    debugPrint('DEBUG: Recording permission granted: $hasPermission');
 
     if (!hasPermission) {
-      print('DEBUG: Permission denied, showing snackbar');
+      debugPrint('DEBUG: Permission denied, showing snackbar');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -631,25 +579,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Map<String, String> _getFileExtensionAndMimeType(String filePath) {
-    final extension = filePath.split('.').last.toLowerCase();
-
-    switch (extension) {
-      case 'jpg':
-      case 'jpeg':
-        return {'extension': 'jpg', 'mimeType': 'image/jpeg'};
-      case 'png':
-        return {'extension': 'png', 'mimeType': 'image/png'};
-      case 'heic':
-        return {'extension': 'heic', 'mimeType': 'image/heic'};
-      case 'webp':
-        return {'extension': 'webp', 'mimeType': 'image/webp'};
-      case 'gif':
-        return {'extension': 'gif', 'mimeType': 'image/gif'};
-      default:
-        return {'extension': 'jpg', 'mimeType': 'image/jpeg'};
-    }
-  }
 
   Future<void> _showAttachmentDialog() async {
     showModalBottomSheet(
@@ -1282,7 +1211,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // Mark all messages as sent after successful bulk operation
       _markMessagesAsSent(allMessagesToSend);
     } catch (e) {
-      print('Bulk send failed: $e');
+      debugPrint('Bulk send failed: $e');
       _addErrorMessage(
         'Sorry, er ging iets mis bij het versturen van berichten.',
       );
@@ -1852,6 +1781,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                   return;
                                 }
 
+                                // Capture context before async gap
+                                final dialogContext = context;
+                                final scaffoldContext = this.context;
+
                                 setDialogState(() {
                                   _isDeletingSession = true;
                                 });
@@ -1872,9 +1805,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
                                   // Close dialog and navigate to StartScreen
                                   if (mounted) {
-                                    Navigator.pop(context);
+                                    // ignore: use_build_context_synchronously
+                                    Navigator.pop(dialogContext);
+                                    // ignore: use_build_context_synchronously
                                     Navigator.pushReplacement(
-                                      context,
+                                      // ignore: use_build_context_synchronously
+                                      scaffoldContext,
                                       MaterialPageRoute(
                                         builder:
                                             (context) => const StartScreen(),
@@ -1888,7 +1824,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                   });
 
                                   if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
+                                    // ignore: use_build_context_synchronously
+                                    ScaffoldMessenger.of(scaffoldContext).showSnackBar(
                                       const SnackBar(
                                         content: Text(
                                           'Kon sessie niet verwijderen. Probeer het opnieuw.',
@@ -2029,7 +1966,7 @@ class _ChatScreenState extends State<ChatScreen> {
         requestBody['chatType'] = _chatType!;
       }
 
-      print('DEBUG: Fetching chat title with: ${jsonEncode(requestBody)}');
+      debugPrint('DEBUG: Fetching chat title with: ${jsonEncode(requestBody)}');
 
       final response = await http
           .post(
@@ -2044,7 +1981,7 @@ class _ChatScreenState extends State<ChatScreen> {
           )
           .timeout(const Duration(seconds: 10));
 
-      print(
+      debugPrint(
         'DEBUG: Chat title API response: ${response.statusCode} - ${response.body}',
       );
 
@@ -2053,38 +1990,38 @@ class _ChatScreenState extends State<ChatScreen> {
         final sessionTitle = session['session_title']?.toString();
         final sessionChatType =
             session['chatType']?.toString() ?? session['chat_type']?.toString();
-        print('DEBUG: Extracted session title: $sessionTitle');
-        print('DEBUG: Extracted chatType: $sessionChatType');
-        print('DEBUG: Current _chatTitle value: $_chatTitle');
-        print('DEBUG: Current _chatType value: $_chatType');
-        print('DEBUG: Widget mounted: $mounted');
+        debugPrint('DEBUG: Extracted session title: $sessionTitle');
+        debugPrint('DEBUG: Extracted chatType: $sessionChatType');
+        debugPrint('DEBUG: Current _chatTitle value: $_chatTitle');
+        debugPrint('DEBUG: Current _chatType value: $_chatType');
+        debugPrint('DEBUG: Widget mounted: $mounted');
 
         if (sessionTitle != null && sessionTitle.isNotEmpty &&
             !sessionTitle.startsWith('newsession_') &&
             !sessionTitle.startsWith('session_')) {
-          print('DEBUG: Updating chat title to: $sessionTitle');
+          debugPrint('DEBUG: Updating chat title to: $sessionTitle');
           if (mounted) {
             setState(() {
               _chatTitle = sessionTitle;
               // Update chatType if available from response
               if (sessionChatType != null && sessionChatType.isNotEmpty) {
                 _chatType = sessionChatType;
-                print('DEBUG: Updated _chatType to: $_chatType');
+                debugPrint('DEBUG: Updated _chatType to: $_chatType');
               }
             });
-            print(
+            debugPrint(
               'DEBUG: setState completed, new _chatTitle: $_chatTitle, new _chatType: $_chatType',
             );
           } else {
-            print('DEBUG: Widget not mounted, skipping setState');
+            debugPrint('DEBUG: Widget not mounted, skipping setState');
           }
         } else {
-          print('DEBUG: Session title is null or empty');
+          debugPrint('DEBUG: Session title is null or empty');
         }
       }
     } catch (e) {
       // Silently handle errors - keep existing title
-      print('Error fetching chat title: $e');
+      debugPrint('Error fetching chat title: $e');
     }
   }
 
@@ -2104,7 +2041,7 @@ class _ChatScreenState extends State<ChatScreen> {
         requestBody['chatType'] = _chatType!;
       }
 
-      print('DEBUG: Deleting session with: ${jsonEncode(requestBody)}');
+      debugPrint('DEBUG: Deleting session with: ${jsonEncode(requestBody)}');
 
       final response = await http
           .post(
@@ -2119,27 +2056,27 @@ class _ChatScreenState extends State<ChatScreen> {
           )
           .timeout(const Duration(seconds: 10));
 
-      print(
+      debugPrint(
         'DEBUG: Delete session API response: ${response.statusCode} - ${response.body}',
       );
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
         if (responseData['response'] == 'success') {
-          print('DEBUG: Session deleted successfully');
+          debugPrint('DEBUG: Session deleted successfully');
           return true;
         } else {
-          print('DEBUG: Unexpected response: $responseData');
+          debugPrint('DEBUG: Unexpected response: $responseData');
           return false;
         }
       } else {
-        print(
+        debugPrint(
           'DEBUG: Delete session failed with status: ${response.statusCode}',
         );
         return false;
       }
     } catch (e) {
-      print('Error deleting session: $e');
+      debugPrint('Error deleting session: $e');
       return false;
     }
   }
@@ -2554,7 +2491,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!_showSendToTeamBanner) return const SizedBox.shrink();
 
     return Container(
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFF9FAFB),
@@ -2626,13 +2563,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+    final homeIndicatorHeight = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
-      resizeToAvoidBottomInset: true,
-      body: Column(
-        children: [
+      resizeToAvoidBottomInset: false,
+      body: Padding(
+        padding: EdgeInsets.only(bottom: keyboardHeight),
+        child: Column(
+          children: [
           // Custom Header
-          SafeArea(
-            bottom: false,
+          Container(
+            padding: EdgeInsets.only(top: statusBarHeight),
             child: _buildHeader(),
           ),
 
@@ -2687,15 +2630,18 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             // Message input
-            SafeArea(
-              top: false,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  border: Border(top: BorderSide(color: Colors.grey, width: 0.5)),
-                ),
-                child: Row(
+            Container(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: 16 + homeIndicatorHeight,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Colors.grey, width: 0.5)),
+              ),
+              child: Row(
                 children: [
                     Expanded(
                       child: Container(
@@ -2809,9 +2755,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
               ),
-            ),
           ],
         ),
+      ),
     );
   }
 }

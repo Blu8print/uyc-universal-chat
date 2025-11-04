@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -31,10 +32,10 @@ class AudioRecordingService {
   }
 
   Future<bool> requestPermission() async {
-    print('DEBUG: Checking microphone permission with record package...');
+    debugPrint('DEBUG: Checking microphone permission with record package...');
     
     final hasPermission = await _recorder.hasPermission();
-    print('DEBUG: Record package permission result: $hasPermission');
+    debugPrint('DEBUG: Record package permission result: $hasPermission');
     
     return hasPermission;
   }

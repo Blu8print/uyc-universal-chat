@@ -1,4 +1,4 @@
-name: Kwaaijongens_app
+name: kwaaijongens_app
 description: "De Kwaaijongs APP."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
