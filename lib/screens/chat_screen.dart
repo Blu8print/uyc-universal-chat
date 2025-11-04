@@ -229,10 +229,10 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         _scrollToBottom();
 
-        // Show send to team banner for existing chats with messages
-        if (messages.isNotEmpty) {
-          _displaySendToTeamBanner();
-        }
+        // DISABLED: Show send to team banner for existing chats with messages
+        // if (messages.isNotEmpty) {
+        //   _displaySendToTeamBanner();
+        // }
 
         return;
       }
@@ -315,7 +315,8 @@ class _ChatScreenState extends State<ChatScreen> {
     _audioService.dispose();
     _audioPlayer?.dispose();
     _recordingTimer?.cancel();
-    _bannerTimer?.cancel();
+    // DISABLED: Banner timer cleanup
+    // _bannerTimer?.cancel();
     super.dispose();
   }
 
@@ -1121,25 +1122,25 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     });
 
-    // Show/hide banner based on text field state
-    if (text.trim().isEmpty && _bannerAvailable) {
-      setState(() {
-        _showSendToTeamBanner = true;
-      });
-    } else {
-      setState(() {
-        _showSendToTeamBanner = false;
-      });
-    }
+    // DISABLED: Show/hide banner based on text field state
+    // if (text.trim().isEmpty && _bannerAvailable) {
+    //   setState(() {
+    //     _showSendToTeamBanner = true;
+    //   });
+    // } else {
+    //   setState(() {
+    //     _showSendToTeamBanner = false;
+    //   });
+    // }
   }
 
   void _onTextFieldTapped() {
-    // Hide banner immediately when user taps the input field
-    if (_showSendToTeamBanner) {
-      setState(() {
-        _showSendToTeamBanner = false;
-      });
-    }
+    // DISABLED: Hide banner immediately when user taps the input field
+    // if (_showSendToTeamBanner) {
+    //   setState(() {
+    //     _showSendToTeamBanner = false;
+    //   });
+    // }
     // Scroll to bottom when input is tapped
     _scrollToBottom();
   }
@@ -1277,8 +1278,8 @@ class _ChatScreenState extends State<ChatScreen> {
       // Generate and play audio if enabled
       await _generateAndPlayAudio();
 
-      // Show send to team banner after AI response
-      _displaySendToTeamBanner();
+      // DISABLED: Show send to team banner after AI response
+      // _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -1367,8 +1368,8 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
 
-      // Show send to team banner after AI response
-      _displaySendToTeamBanner();
+      // DISABLED: Show send to team banner after AI response
+      // _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -1443,8 +1444,8 @@ class _ChatScreenState extends State<ChatScreen> {
       // Generate and play audio if enabled
       await _generateAndPlayAudio();
 
-      // Show send to team banner after AI response
-      _displaySendToTeamBanner();
+      // DISABLED: Show send to team banner after AI response
+      // _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -1517,8 +1518,8 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
 
-      // Show send to team banner after AI response
-      _displaySendToTeamBanner();
+      // DISABLED: Show send to team banner after AI response
+      // _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -1594,8 +1595,8 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
 
-      // Show send to team banner after AI response
-      _displaySendToTeamBanner();
+      // DISABLED: Show send to team banner after AI response
+      // _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -2487,79 +2488,81 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildSendToTeamBanner() {
-    if (!_showSendToTeamBanner) return const SizedBox.shrink();
+  // DISABLED: Banner UI widget - kept for future use
+  // Widget _buildSendToTeamBanner() {
+  //   if (!_showSendToTeamBanner) return const SizedBox.shrink();
+  //
+  //   return Container(
+  //     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  //     padding: const EdgeInsets.all(16),
+  //     decoration: BoxDecoration(
+  //       color: const Color(0xFFF9FAFB),
+  //       borderRadius: BorderRadius.circular(12),
+  //       border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+  //     ),
+  //     child: Row(
+  //       children: [
+  //         Container(
+  //           width: 20,
+  //           height: 20,
+  //           decoration: const BoxDecoration(
+  //             color: Color(0xFFCC0001),
+  //             shape: BoxShape.circle,
+  //           ),
+  //           child: const Icon(Icons.check, color: Colors.white, size: 12),
+  //         ),
+  //         const SizedBox(width: 12),
+  //         Expanded(
+  //           child: Text(
+  //             (SessionService.currentSessionData?.emailSent ?? false) && !_userTypedAfterEmailSent
+  //                 ? 'Wil je nog iets toevoegen? Dat kan, begin met typen'
+  //                 : 'Alles verteld wat we moeten weten? Mooi! Stuur maar door!',
+  //             style: const TextStyle(
+  //               fontSize: 14,
+  //               color: Color(0xFF374151),
+  //               fontWeight: FontWeight.w500,
+  //             ),
+  //           ),
+  //         ),
+  //         const SizedBox(width: 12),
+  //         if (!((SessionService.currentSessionData?.emailSent ?? false) && !_userTypedAfterEmailSent))
+  //           TextButton(
+  //             onPressed: () {
+  //               setState(() {
+  //                 _showSendToTeamBanner = false;
+  //               });
+  //               _bannerTimer?.cancel();
+  //               _sendEmail();
+  //             },
+  //             style: TextButton.styleFrom(
+  //               backgroundColor: const Color(0xFFCC0001),
+  //               foregroundColor: Colors.white,
+  //               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  //               shape: RoundedRectangleBorder(
+  //                 borderRadius: BorderRadius.circular(6),
+  //               ),
+  //             ),
+  //             child: const Text(
+  //               'Versturen',
+  //               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+  //             ),
+  //           ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            decoration: const BoxDecoration(
-              color: Color(0xFFCC0001),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.check, color: Colors.white, size: 12),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              (SessionService.currentSessionData?.emailSent ?? false) && !_userTypedAfterEmailSent
-                  ? 'Wil je nog iets toevoegen? Dat kan, begin met typen'
-                  : 'Alles verteld wat we moeten weten? Mooi! Stuur maar door!',
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF374151),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          if (!((SessionService.currentSessionData?.emailSent ?? false) && !_userTypedAfterEmailSent))
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _showSendToTeamBanner = false;
-                });
-                _bannerTimer?.cancel();
-                _sendEmail();
-              },
-              style: TextButton.styleFrom(
-                backgroundColor: const Color(0xFFCC0001),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-              child: const Text(
-                'Versturen',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  void _displaySendToTeamBanner() {
-    // Cancel any existing timer
-    _bannerTimer?.cancel();
-
-    // Make banner available and show if text field is empty
-    setState(() {
-      _bannerAvailable = true;
-      _showSendToTeamBanner = _messageController.text.trim().isEmpty;
-    });
-  }
+  // DISABLED: Banner display method - kept for future use
+  // void _displaySendToTeamBanner() {
+  //   // Cancel any existing timer
+  //   _bannerTimer?.cancel();
+  //
+  //   // Make banner available and show if text field is empty
+  //   setState(() {
+  //     _bannerAvailable = true;
+  //     _showSendToTeamBanner = _messageController.text.trim().isEmpty;
+  //   });
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -2599,8 +2602,8 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
 
-            // Send to Team Banner
-            _buildSendToTeamBanner(),
+            // Send to Team Banner - DISABLED (kept for future use)
+            // _buildSendToTeamBanner(),
 
             // Recording indicator
             if (_isRecording)
