@@ -14,14 +14,17 @@ import '../services/api_service.dart';
 import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
 import '../widgets/document_message_widget.dart';
+import '../widgets/video_message_widget.dart';
 import 'package:image_picker/image_picker.dart';
 import 'start_screen.dart';
+import 'video_player_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:light_compressor/light_compressor.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 void main() {
   runApp(const MyApp());
@@ -77,6 +80,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _bannerAvailable = false;
   bool _userTypedAfterEmailSent = false;
   Timer? _bannerTimer;
+  int _userMessageCount = 0;  // Track user messages to show banner after 3
   String _chatTitle = 'Chat';
   String? _chatType;
   bool _audioEnabled = false;
@@ -227,10 +231,9 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         _scrollToBottom();
 
-        // DISABLED: Show send to team banner for existing chats with messages
-        // if (messages.isNotEmpty) {
-        //   _displaySendToTeamBanner();
-        // }
+        if (messages.isNotEmpty) {
+          _displaySendToTeamBanner();
+        }
 
         return;
       }
@@ -272,6 +275,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _addMessage(ChatMessage message) async {
     setState(() {
       _messages.insert(0,message);
+      // Increment user message count for banner display after 3 messages
+      if (message.isCustomer) {
+        _userMessageCount++;
+      }
     });
     await _saveMessages();
   }
@@ -1121,6 +1128,28 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _playVideo(ChatMessage message) async {
+    if (message.mediaMetadata == null) return;
+
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => VideoPlayerScreen(
+            videoUrl: message.mediaMetadata!.previewUrl,
+            title: message.mediaMetadata!.filename,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error playing video: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error bij afspelen video: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _showDocumentDeleteDialog(ChatMessage message) async {
     if (message.mediaMetadata == null) return;
 
@@ -1365,6 +1394,36 @@ class _ChatScreenState extends State<ChatScreen> {
     _uploadVideoInBackground(newMessage, videoFile);
   }
 
+  /// Generate and save video thumbnail locally
+  Future<String?> _generateVideoThumbnail(File videoFile) async {
+    try {
+      final uint8list = await VideoThumbnail.thumbnailData(
+        video: videoFile.path,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 250,
+        quality: 75,
+      );
+
+      if (uint8list != null) {
+        final appDir = await getApplicationDocumentsDirectory();
+        final thumbnailDir = Directory('${appDir.path}/video_thumbnails');
+        if (!thumbnailDir.existsSync()) {
+          thumbnailDir.createSync(recursive: true);
+        }
+
+        final thumbnailFile = File(
+          '${thumbnailDir.path}/thumbnail_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        );
+        await thumbnailFile.writeAsBytes(uint8list);
+        debugPrint('DEBUG: Thumbnail saved at: ${thumbnailFile.path}');
+        return thumbnailFile.path;
+      }
+    } catch (e) {
+      debugPrint('Error generating thumbnail: $e');
+    }
+    return null;
+  }
+
   Future<void> _uploadVideoInBackground(ChatMessage message, File videoFile) async {
     try {
       final user = await StorageService.getUser();
@@ -1400,6 +1459,9 @@ class _ChatScreenState extends State<ChatScreen> {
         if (metadata != null) {
           debugPrint('DEBUG: Updating video message with metadata...');
 
+          // Generate thumbnail before updating message
+          final thumbnailPath = await _generateVideoThumbnail(videoFile);
+
           // Update message: replace temp file with Nextcloud metadata
           setState(() {
             final index = _messages.indexWhere((m) =>
@@ -1413,6 +1475,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 isCustomer: message.isCustomer,
                 timestamp: message.timestamp,
                 videoFile: null,  // Remove temp file
+                videoThumbnailPath: thumbnailPath,  // Add thumbnail path
                 attachmentType: AttachmentType.video,
                 status: MessageStatus.sent,  // Mark as sent
                 mediaMetadata: metadata,  // Add Nextcloud data
@@ -1637,25 +1700,23 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     });
 
-    // DISABLED: Show/hide banner based on text field state
-    // if (text.trim().isEmpty && _bannerAvailable) {
-    //   setState(() {
-    //     _showSendToTeamBanner = true;
-    //   });
-    // } else {
-    //   setState(() {
-    //     _showSendToTeamBanner = false;
-    //   });
-    // }
+    if (text.trim().isEmpty && _bannerAvailable) {
+      setState(() {
+        _showSendToTeamBanner = true;
+      });
+    } else {
+      setState(() {
+        _showSendToTeamBanner = false;
+      });
+    }
   }
 
   void _onTextFieldTapped() {
-    // DISABLED: Hide banner immediately when user taps the input field
-    // if (_showSendToTeamBanner) {
-    //   setState(() {
-    //     _showSendToTeamBanner = false;
-    //   });
-    // }
+    if (_showSendToTeamBanner) {
+      setState(() {
+        _showSendToTeamBanner = false;
+      });
+    }
     // Scroll to bottom when input is tapped
     _scrollToBottom();
   }
@@ -1793,8 +1854,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // Generate and play audio if enabled
       await _generateAndPlayAudio();
 
-      // DISABLED: Show send to team banner after AI response
-      // _displaySendToTeamBanner();
+      _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -1883,8 +1943,7 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
 
-      // DISABLED: Show send to team banner after AI response
-      // _displaySendToTeamBanner();
+      _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -1959,8 +2018,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // Generate and play audio if enabled
       await _generateAndPlayAudio();
 
-      // DISABLED: Show send to team banner after AI response
-      // _displaySendToTeamBanner();
+      _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -2033,8 +2091,7 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
 
-      // DISABLED: Show send to team banner after AI response
-      // _displaySendToTeamBanner();
+      _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -2110,8 +2167,7 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
 
-      // DISABLED: Show send to team banner after AI response
-      // _displaySendToTeamBanner();
+      _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -3003,81 +3059,79 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // DISABLED: Banner UI widget - kept for future use
-  // Widget _buildSendToTeamBanner() {
-  //   if (!_showSendToTeamBanner) return const SizedBox.shrink();
-  //
-  //   return Container(
-  //     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-  //     padding: const EdgeInsets.all(16),
-  //     decoration: BoxDecoration(
-  //       color: const Color(0xFFF9FAFB),
-  //       borderRadius: BorderRadius.circular(12),
-  //       border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-  //     ),
-  //     child: Row(
-  //       children: [
-  //         Container(
-  //           width: 20,
-  //           height: 20,
-  //           decoration: const BoxDecoration(
-  //             color: Color(0xFFCC0001),
-  //             shape: BoxShape.circle,
-  //           ),
-  //           child: const Icon(Icons.check, color: Colors.white, size: 12),
-  //         ),
-  //         const SizedBox(width: 12),
-  //         Expanded(
-  //           child: Text(
-  //             (SessionService.currentSessionData?.emailSent ?? false) && !_userTypedAfterEmailSent
-  //                 ? 'Wil je nog iets toevoegen? Dat kan, begin met typen'
-  //                 : 'Alles verteld wat we moeten weten? Mooi! Stuur maar door!',
-  //             style: const TextStyle(
-  //               fontSize: 14,
-  //               color: Color(0xFF374151),
-  //               fontWeight: FontWeight.w500,
-  //             ),
-  //           ),
-  //         ),
-  //         const SizedBox(width: 12),
-  //         if (!((SessionService.currentSessionData?.emailSent ?? false) && !_userTypedAfterEmailSent))
-  //           TextButton(
-  //             onPressed: () {
-  //               setState(() {
-  //                 _showSendToTeamBanner = false;
-  //               });
-  //               _bannerTimer?.cancel();
-  //               _sendEmail();
-  //             },
-  //             style: TextButton.styleFrom(
-  //               backgroundColor: const Color(0xFFCC0001),
-  //               foregroundColor: Colors.white,
-  //               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-  //               shape: RoundedRectangleBorder(
-  //                 borderRadius: BorderRadius.circular(6),
-  //               ),
-  //             ),
-  //             child: const Text(
-  //               'Versturen',
-  //               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-  //             ),
-  //           ),
-  //       ],
-  //     ),
-  //   );
-  // }
+  Widget _buildSendToTeamBanner() {
+    if (!_showSendToTeamBanner) return const SizedBox.shrink();
 
-  // DISABLED: Banner display method - kept for future use
-  // void _displaySendToTeamBanner() {
-  //   // Cancel any existing timer
-  //   _bannerTimer?.cancel();
-  //
-  //   // Make banner available and show if text field is empty
-  //   setState(() {
-  //     _bannerAvailable = true;
-  //     _showSendToTeamBanner = _messageController.text.trim().isEmpty;
-  //   });
-  // }
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
+              color: Color(0xFFCC0001),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check, color: Colors.white, size: 12),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Alles verteld wat we moeten weten? Mooi! Mag het team ermee aan de slag?',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF374151),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _showSendToTeamBanner = false;
+              });
+              _bannerTimer?.cancel();
+              _sendEmail();
+            },
+            style: TextButton.styleFrom(
+              backgroundColor: const Color(0xFFCC0001),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            child: const Text(
+              'Team inlichten',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _displaySendToTeamBanner() {
+    // Only show banner after user has sent 3 or more messages
+    if (_userMessageCount < 3) return;
+
+    // Cancel any existing timer
+    _bannerTimer?.cancel();
+
+    // Make banner available and show if text field is empty
+    setState(() {
+      _bannerAvailable = true;
+      _showSendToTeamBanner = _messageController.text.trim().isEmpty;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3120,6 +3174,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       onImageLongPress: _showImageDeleteDialog,
                       onDocumentLongPress: _showDocumentDeleteDialog,
                       onVideoLongPress: _showVideoDeleteDialog,
+                      onVideoTap: _playVideo,
                     );
                   },
                 ),
@@ -3127,8 +3182,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-            // Send to Team Banner - DISABLED (kept for future use)
-            // _buildSendToTeamBanner(),
+            _buildSendToTeamBanner(),
 
             // Recording indicator
             if (_isRecording)
@@ -3354,6 +3408,7 @@ class ChatMessage {
   final File? imageFile;
   final File? documentFile;
   final File? videoFile;
+  final String? videoThumbnailPath;
   final AttachmentType attachmentType;
   final MessageStatus status;
   final bool fromFCM;
@@ -3368,6 +3423,7 @@ class ChatMessage {
     this.imageFile,
     this.documentFile,
     this.videoFile,
+    this.videoThumbnailPath,
     this.attachmentType = AttachmentType.none,
     this.status = MessageStatus.pending,
     this.fromFCM = false,
@@ -3385,6 +3441,7 @@ class ChatMessage {
       'imageFilePath': imageFile?.path,
       'documentFilePath': documentFile?.path,
       'videoFilePath': videoFile?.path,
+      'videoThumbnailPath': videoThumbnailPath,
       'attachmentType': attachmentType.toString(),
       'status': status.toString(),
       'fromFCM': fromFCM,
@@ -3408,6 +3465,7 @@ class ChatMessage {
               : null,
       videoFile:
           json['videoFilePath'] != null ? File(json['videoFilePath']) : null,
+      videoThumbnailPath: json['videoThumbnailPath'],
       attachmentType: _parseAttachmentType(json['attachmentType']),
       status: _parseMessageStatus(json['status']),
       fromFCM: json['fromFCM'] ?? false,
@@ -3454,6 +3512,7 @@ class ChatBubble extends StatelessWidget {
   final Function(ChatMessage)? onImageLongPress;
   final Function(ChatMessage)? onDocumentLongPress;
   final Function(ChatMessage)? onVideoLongPress;
+  final Function(ChatMessage)? onVideoTap;
 
   const ChatBubble({
     super.key,
@@ -3461,6 +3520,7 @@ class ChatBubble extends StatelessWidget {
     this.onImageLongPress,
     this.onDocumentLongPress,
     this.onVideoLongPress,
+    this.onVideoTap,
   });
 
   @override
@@ -3557,6 +3617,36 @@ class ChatBubble extends StatelessWidget {
                               isUploading: message.status == MessageStatus.uploading,
                               onLongPress: onDocumentLongPress != null
                                 ? () => onDocumentLongPress!(message)
+                                : null,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatTime(message.timestamp),
+                              style: TextStyle(
+                                color:
+                                    message.isCustomer
+                                        ? Colors.white70
+                                        : Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        )
+                      else if (message.attachmentType == AttachmentType.video &&
+                          message.mediaMetadata != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            VideoMessageWidget(
+                              thumbnailPath: message.videoThumbnailPath,
+                              isCustomer: message.isCustomer,
+                              isUploading: message.status == MessageStatus.uploading,
+                              title: message.mediaMetadata!.filename,
+                              onTap: onVideoTap != null
+                                ? () => onVideoTap!(message)
+                                : null,
+                              onLongPress: onVideoLongPress != null
+                                ? () => onVideoLongPress!(message)
                                 : null,
                             ),
                             const SizedBox(height: 4),
