@@ -225,7 +225,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
 
         setState(() {
-          _messages.addAll(messages);
+          _messages.addAll(messages.reversed);  // Reverse for correct order with reverse: true ListView
         });
         _scrollToBottom();
 
@@ -273,7 +273,7 @@ class _ChatScreenState extends State<ChatScreen> {
   // Add message and save to storage
   Future<void> _addMessage(ChatMessage message) async {
     setState(() {
-      _messages.add(message);
+      _messages.insert(0,message);
     });
     await _saveMessages();
   }
@@ -324,7 +324,7 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0,  // With reverse: true, position 0 = bottom (newest messages)
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -879,7 +879,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // Add progress message
       if (imageFiles.length > 1) {
         setState(() {
-          _messages.add(
+          _messages.insert(0,
             ChatMessage(
               text:
                   'Afbeelding ${i + 1} van ${imageFiles.length} wordt verzonden...',
@@ -957,7 +957,7 @@ class _ChatScreenState extends State<ChatScreen> {
       status: MessageStatus.sent,
     );
     setState(() {
-      _messages.add(compressingMessage);
+      _messages.insert(0,compressingMessage);
     });
     _scrollToBottom();
 
@@ -1265,7 +1265,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       setState(() {
-        _messages.add(
+        _messages.insert(0,
           ChatMessage(
             text: botResponse,
             isCustomer: false,
@@ -1358,7 +1358,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       setState(() {
-        _messages.add(
+        _messages.insert(0,
           ChatMessage(
             text: botResponse,
             isCustomer: false,
@@ -1431,7 +1431,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       setState(() {
-        _messages.add(
+        _messages.insert(0,
           ChatMessage(
             text: botResponse,
             isCustomer: false,
@@ -1508,7 +1508,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       setState(() {
-        _messages.add(
+        _messages.insert(0,
           ChatMessage(
             text: botResponse,
             isCustomer: false,
@@ -1585,7 +1585,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       setState(() {
-        _messages.add(
+        _messages.insert(0,
           ChatMessage(
             text: botResponse,
             isCustomer: false,
@@ -2584,10 +2584,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
             // Chat messages
             Expanded(
-              child: GestureDetector(
-                onTap: () => FocusScope.of(context).unfocus(),
-                behavior: HitTestBehavior.opaque,
-                child: ListView.builder(
+              child: Align(
+                alignment: Alignment.topCenter,  // CRITICAL for keyboard response
+                child: GestureDetector(
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  behavior: HitTestBehavior.opaque,
+                  child: ListView.builder(
+                  reverse: true,  // Build from bottom - chat standard
+                  shrinkWrap: true,  // Takes only needed space - responds to keyboard
                   controller: _scrollController,
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(16),
@@ -2601,6 +2605,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
+          ),
 
             // Send to Team Banner - DISABLED (kept for future use)
             // _buildSendToTeamBanner(),
