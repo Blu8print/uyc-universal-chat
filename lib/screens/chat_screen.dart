@@ -212,9 +212,7 @@ class _ChatScreenState extends State<ChatScreen> {
         final messages =
             savedMessages
                 .map((json) => ChatMessage.fromJson(json))
-                .where(
-                  (msg) => _isFileStillValid(msg),
-                ) // Filter out messages with missing files
+                // No longer filter - messages with mediaMetadata load from Nextcloud
                 .toList();
 
         // Load chatType from SessionData if available
@@ -225,7 +223,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
 
         setState(() {
-          _messages.addAll(messages.reversed);  // Reverse for correct order with reverse: true ListView
+          _messages.addAll(messages);  // ListView reverse: true handles the display order
         });
         _scrollToBottom();
 
@@ -580,6 +578,36 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // Parse media webhook response (can be array or single object)
+  MediaMetadata? _parseMediaResponse(String responseBody) {
+    debugPrint('DEBUG: Parsing media response: $responseBody');
+    try {
+      final data = jsonDecode(responseBody);
+      debugPrint('DEBUG: Decoded data type: ${data.runtimeType}');
+
+      // Handle array format
+      if (data is List && data.isNotEmpty) {
+        debugPrint('DEBUG: Found ${data.length} items in array');
+        final metadata = MediaMetadata.fromJson(data[0]);
+        debugPrint('DEBUG: Parsed metadata - storage_url: ${metadata.storageUrl}');
+        return metadata;
+      }
+      // Handle single object format
+      else if (data is Map<String, dynamic>) {
+        debugPrint('DEBUG: Response is a single object (Map)');
+        final metadata = MediaMetadata.fromJson(data);
+        debugPrint('DEBUG: Parsed metadata - storage_url: ${metadata.storageUrl}');
+        return metadata;
+      }
+      else {
+        debugPrint('DEBUG: Data is neither a List nor a Map');
+      }
+    } catch (e) {
+      debugPrint('Error parsing media response: $e');
+      debugPrint('DEBUG: Response body was: $responseBody');
+    }
+    return null;
+  }
 
   Future<void> _showAttachmentDialog() async {
     showModalBottomSheet(
@@ -908,22 +936,189 @@ class _ChatScreenState extends State<ChatScreen> {
       _showSendToTeamBanner = false;
     });
 
-    // Create new image message with pending status
+    // Create new image message with uploading status
     final newMessage = ChatMessage(
       text: '📷 Afbeelding',
       isCustomer: true,
       timestamp: DateTime.now(),
-      imageFile: imageFile,
+      imageFile: imageFile,  // Temp file - will be replaced with URL after upload
       attachmentType: AttachmentType.image,
-      status: MessageStatus.pending, // Start as pending
+      status: MessageStatus.uploading, // Show as uploading with spinner
     );
 
-    // Add message immediately
+    // Add message immediately (shows temp preview with spinner)
     await _addMessage(newMessage);
     _scrollToBottom();
 
-    // Send in bulk with all pending messages
-    await _sendBulkMessages(newMessage);
+    // Upload in background - user can continue typing
+    _uploadImageInBackground(newMessage, imageFile);
+  }
+
+  Future<void> _uploadImageInBackground(ChatMessage message, File imageFile) async {
+    try {
+      final user = await StorageService.getUser();
+      if (user == null) return;
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(_n8nImageUrl),
+      );
+
+      request.headers.addAll({
+        'Authorization': _getBasicAuthHeader(),
+        'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+      });
+
+      request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.fields['phoneNumber'] = user.phoneNumber;
+      request.fields['name'] = user.name;
+      request.fields['companyName'] = user.companyName;
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        debugPrint('DEBUG: Image upload successful, status: ${response.statusCode}');
+        debugPrint('DEBUG: Response body: ${response.body}');
+
+        // Parse Nextcloud metadata from webhook response
+        final metadata = _parseMediaResponse(response.body);
+        debugPrint('DEBUG: Metadata parsed: ${metadata != null}');
+
+        if (metadata != null) {
+          debugPrint('DEBUG: Updating message with metadata...');
+          debugPrint('DEBUG: Looking for message with timestamp: ${message.timestamp}');
+
+          // Update message: replace temp file with Nextcloud metadata
+          setState(() {
+            final index = _messages.indexWhere((m) =>
+                m.timestamp == message.timestamp &&
+                m.attachmentType == AttachmentType.image);
+            debugPrint('DEBUG: Found message at index: $index');
+
+            if (index != -1) {
+              _messages[index] = ChatMessage(
+                text: message.text,
+                isCustomer: message.isCustomer,
+                timestamp: message.timestamp,
+                imageFile: null,  // Remove temp file
+                attachmentType: AttachmentType.image,
+                status: MessageStatus.sent,  // Mark as sent
+                mediaMetadata: metadata,  // Add Nextcloud data
+              );
+              debugPrint('DEBUG: Message updated with storage_url: ${metadata.storageUrl}');
+            }
+          });
+
+          // Save updated message to storage
+          await _saveMessages();
+          debugPrint('DEBUG: Messages saved to storage');
+
+          // Description stored in metadata but not displayed as separate message
+        } else {
+          debugPrint('DEBUG: Metadata was null - response not parsed correctly');
+        }
+      } else {
+        debugPrint('DEBUG: Upload failed with status: ${response.statusCode}');
+        debugPrint('DEBUG: Response body: ${response.body}');
+        // Mark upload as failed
+        setState(() {
+          final index = _messages.indexWhere((m) =>
+              m.timestamp == message.timestamp &&
+              m.attachmentType == AttachmentType.image);
+          if (index != -1) {
+            _messages[index] = ChatMessage(
+              text: message.text,
+              isCustomer: message.isCustomer,
+              timestamp: message.timestamp,
+              imageFile: message.imageFile,
+              attachmentType: AttachmentType.image,
+              status: MessageStatus.failed,
+            );
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error uploading image: $e');
+      // Mark as failed
+      setState(() {
+        final index = _messages.indexWhere((m) =>
+            m.timestamp == message.timestamp &&
+            m.attachmentType == AttachmentType.image);
+        if (index != -1) {
+          _messages[index] = ChatMessage(
+            text: message.text,
+            isCustomer: message.isCustomer,
+            timestamp: message.timestamp,
+            imageFile: message.imageFile,
+            attachmentType: AttachmentType.image,
+            status: MessageStatus.failed,
+          );
+        }
+      });
+    }
+  }
+
+  Future<void> _showImageDeleteDialog(ChatMessage message) async {
+    if (message.mediaMetadata == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Afbeelding verwijderen'),
+        content: const Text('Weet je zeker dat je deze afbeelding wilt verwijderen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuleer'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Verwijder', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteImage(message);
+    }
+  }
+
+  Future<void> _deleteImage(ChatMessage message) async {
+    if (message.mediaMetadata == null) return;
+
+    try {
+      debugPrint('DEBUG: Deleting image: ${message.mediaMetadata!.filename}');
+
+      final response = await http.post(
+        Uri.parse('https://automation.kwaaijongens.nl/webhook/delete_media'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
+        },
+        body: jsonEncode(message.mediaMetadata!.toJson()),
+      );
+
+      debugPrint('DEBUG: Delete response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        // Remove from chat and save
+        setState(() {
+          _messages.removeWhere((m) =>
+            m.timestamp == message.timestamp &&
+            m.attachmentType == AttachmentType.image
+          );
+        });
+        await _saveMessages();
+        debugPrint('DEBUG: Image deleted and history saved');
+      } else {
+        debugPrint('DEBUG: Delete failed: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error deleting image: $e');
+    }
   }
 
   Future<void> _sendVideoMessage(File videoFile) async {
@@ -2600,7 +2795,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     if (index == _messages.length && _isLoading) {
                       return TypingIndicator(isUploadingFile: _isUploadingFile);
                     }
-                    return ChatBubble(message: _messages[index]);
+                    return ChatBubble(
+                      message: _messages[index],
+                      onImageLongPress: _showImageDeleteDialog,
+                    );
                   },
                 ),
               ),
@@ -2772,7 +2970,55 @@ class _ChatScreenState extends State<ChatScreen> {
 
 enum AttachmentType { none, audio, image, document, video }
 
-enum MessageStatus { pending, sent }
+class MediaMetadata {
+  final String id;
+  final String sessionId;
+  final String filename;
+  final String description;
+  final String seoTitle;
+  final String storageUrl;
+  final DateTime createdAt;
+
+  MediaMetadata({
+    required this.id,
+    required this.sessionId,
+    required this.filename,
+    required this.description,
+    required this.seoTitle,
+    required this.storageUrl,
+    required this.createdAt,
+  });
+
+  String get previewUrl => '$storageUrl/preview';
+
+  factory MediaMetadata.fromJson(Map<String, dynamic> json) {
+    return MediaMetadata(
+      id: json['id'] ?? '',
+      sessionId: json['session_id'] ?? '',
+      filename: json['filename'] ?? '',
+      description: json['description'] ?? '',
+      seoTitle: json['seo_title'] ?? '',
+      storageUrl: json['storage_url'] ?? '',
+      createdAt: json['created_at'] != null
+        ? DateTime.parse(json['created_at'])
+        : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'session_id': sessionId,
+      'filename': filename,
+      'description': description,
+      'seo_title': seoTitle,
+      'storage_url': storageUrl,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+}
+
+enum MessageStatus { pending, uploading, sent, failed }
 
 class ChatMessage {
   final String text;
@@ -2786,6 +3032,7 @@ class ChatMessage {
   final MessageStatus status;
   final bool fromFCM;
   final bool autoPlay;
+  final MediaMetadata? mediaMetadata;  // Nextcloud storage metadata for images/videos/documents
 
   ChatMessage({
     required this.text,
@@ -2799,6 +3046,7 @@ class ChatMessage {
     this.status = MessageStatus.pending,
     this.fromFCM = false,
     this.autoPlay = false,
+    this.mediaMetadata,
   });
 
   // Convert to JSON for storage (files stored as paths)
@@ -2814,6 +3062,7 @@ class ChatMessage {
       'attachmentType': attachmentType.toString(),
       'status': status.toString(),
       'fromFCM': fromFCM,
+      'mediaMetadata': mediaMetadata?.toJson(),
     };
   }
 
@@ -2836,6 +3085,9 @@ class ChatMessage {
       attachmentType: _parseAttachmentType(json['attachmentType']),
       status: _parseMessageStatus(json['status']),
       fromFCM: json['fromFCM'] ?? false,
+      mediaMetadata: json['mediaMetadata'] != null
+          ? MediaMetadata.fromJson(json['mediaMetadata'])
+          : null,
     );
   }
 
@@ -2860,6 +3112,10 @@ class ChatMessage {
     switch (statusString) {
       case 'MessageStatus.sent':
         return MessageStatus.sent;
+      case 'MessageStatus.uploading':
+        return MessageStatus.uploading;
+      case 'MessageStatus.failed':
+        return MessageStatus.failed;
       case 'MessageStatus.pending':
       default:
         return MessageStatus.pending;
@@ -2869,8 +3125,9 @@ class ChatMessage {
 
 class ChatBubble extends StatelessWidget {
   final ChatMessage message;
+  final Function(ChatMessage)? onImageLongPress;
 
-  const ChatBubble({super.key, required this.message});
+  const ChatBubble({super.key, required this.message, this.onImageLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -2919,13 +3176,19 @@ class ChatBubble extends StatelessWidget {
                           autoPlay: message.autoPlay,
                         )
                       else if (message.attachmentType == AttachmentType.image &&
-                          message.imageFile != null)
+                          (message.imageFile != null || message.mediaMetadata != null))
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             ImageMessageWidget(
-                              imageFile: message.imageFile!,
+                              imageFile: message.imageFile,
+                              imageUrl: message.mediaMetadata?.previewUrl,
                               isCustomer: message.isCustomer,
+                              isUploading: message.status == MessageStatus.uploading,
+                              title: message.mediaMetadata?.filename,
+                              onLongPress: onImageLongPress != null
+                                ? () => onImageLongPress!(message)
+                                : null,
                             ),
                             const SizedBox(height: 4),
                             Text(
