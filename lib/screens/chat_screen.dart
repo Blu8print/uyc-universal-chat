@@ -1121,6 +1121,122 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _showDocumentDeleteDialog(ChatMessage message) async {
+    if (message.mediaMetadata == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Document verwijderen'),
+        content: const Text('Weet je zeker dat je dit document wilt verwijderen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuleer'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Verwijder', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteDocument(message);
+    }
+  }
+
+  Future<void> _deleteDocument(ChatMessage message) async {
+    if (message.mediaMetadata == null) return;
+
+    try {
+      debugPrint('DEBUG: Deleting document: ${message.mediaMetadata!.filename}');
+
+      final response = await http.post(
+        Uri.parse('https://automation.kwaaijongens.nl/webhook/delete_media'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
+        },
+        body: jsonEncode(message.mediaMetadata!.toJson()),
+      );
+
+      debugPrint('DEBUG: Delete response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _messages.removeWhere((m) =>
+            m.timestamp == message.timestamp &&
+            m.attachmentType == AttachmentType.document
+          );
+        });
+        await _saveMessages();
+        debugPrint('DEBUG: Document deleted and history saved');
+      }
+    } catch (e) {
+      debugPrint('Error deleting document: $e');
+    }
+  }
+
+  Future<void> _showVideoDeleteDialog(ChatMessage message) async {
+    if (message.mediaMetadata == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Video verwijderen'),
+        content: const Text('Weet je zeker dat je deze video wilt verwijderen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuleer'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Verwijder', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteVideo(message);
+    }
+  }
+
+  Future<void> _deleteVideo(ChatMessage message) async {
+    if (message.mediaMetadata == null) return;
+
+    try {
+      debugPrint('DEBUG: Deleting video: ${message.mediaMetadata!.filename}');
+
+      final response = await http.post(
+        Uri.parse('https://automation.kwaaijongens.nl/webhook/delete_media'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': _getBasicAuthHeader(),
+        },
+        body: jsonEncode(message.mediaMetadata!.toJson()),
+      );
+
+      debugPrint('DEBUG: Delete response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _messages.removeWhere((m) =>
+            m.timestamp == message.timestamp &&
+            m.attachmentType == AttachmentType.video
+          );
+        });
+        await _saveMessages();
+        debugPrint('DEBUG: Video deleted and history saved');
+      }
+    } catch (e) {
+      debugPrint('Error deleting video: $e');
+    }
+  }
+
   Future<void> _sendVideoMessage(File videoFile) async {
     // Check file size (200MB limit)
     final fileSize = await videoFile.length();
@@ -1231,22 +1347,124 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
-    // Create new video message with pending status
+    // Create new video message with uploading status
     final newMessage = ChatMessage(
       text: '🎥 Video',
       isCustomer: true,
       timestamp: DateTime.now(),
-      videoFile: videoFile,
+      videoFile: videoFile,  // Compressed file - will be replaced with URL
       attachmentType: AttachmentType.video,
-      status: MessageStatus.pending,
+      status: MessageStatus.uploading, // Show as uploading with spinner
     );
 
-    // Add message immediately
+    // Add message immediately (shows temp preview with spinner)
     await _addMessage(newMessage);
     _scrollToBottom();
 
-    // Send in bulk with all pending messages
-    await _sendBulkMessages(newMessage);
+    // Upload in background - user can continue typing
+    _uploadVideoInBackground(newMessage, videoFile);
+  }
+
+  Future<void> _uploadVideoInBackground(ChatMessage message, File videoFile) async {
+    try {
+      final user = await StorageService.getUser();
+      if (user == null) return;
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(_n8nVideoUrl),
+      );
+
+      request.headers.addAll({
+        'Authorization': _getBasicAuthHeader(),
+        'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+      });
+
+      request.files.add(await http.MultipartFile.fromPath('video', videoFile.path));
+      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.fields['phoneNumber'] = user.phoneNumber;
+      request.fields['name'] = user.name;
+      request.fields['companyName'] = user.companyName;
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        debugPrint('DEBUG: Video upload successful, status: ${response.statusCode}');
+        debugPrint('DEBUG: Response body: ${response.body}');
+
+        // Parse Nextcloud metadata from webhook response
+        final metadata = _parseMediaResponse(response.body);
+        debugPrint('DEBUG: Metadata parsed: ${metadata != null}');
+
+        if (metadata != null) {
+          debugPrint('DEBUG: Updating video message with metadata...');
+
+          // Update message: replace temp file with Nextcloud metadata
+          setState(() {
+            final index = _messages.indexWhere((m) =>
+                m.timestamp == message.timestamp &&
+                m.attachmentType == AttachmentType.video);
+            debugPrint('DEBUG: Found message at index: $index');
+
+            if (index != -1) {
+              _messages[index] = ChatMessage(
+                text: message.text,
+                isCustomer: message.isCustomer,
+                timestamp: message.timestamp,
+                videoFile: null,  // Remove temp file
+                attachmentType: AttachmentType.video,
+                status: MessageStatus.sent,  // Mark as sent
+                mediaMetadata: metadata,  // Add Nextcloud data
+              );
+              debugPrint('DEBUG: Video updated with storage_url: ${metadata.storageUrl}');
+            }
+          });
+
+          // Save updated message to storage
+          await _saveMessages();
+          debugPrint('DEBUG: Messages saved to storage');
+        } else {
+          debugPrint('DEBUG: Metadata was null - response not parsed correctly');
+        }
+      } else {
+        debugPrint('DEBUG: Upload failed with status: ${response.statusCode}');
+        // Mark upload as failed
+        setState(() {
+          final index = _messages.indexWhere((m) =>
+              m.timestamp == message.timestamp &&
+              m.attachmentType == AttachmentType.video);
+          if (index != -1) {
+            _messages[index] = ChatMessage(
+              text: message.text,
+              isCustomer: message.isCustomer,
+              timestamp: message.timestamp,
+              videoFile: message.videoFile,
+              attachmentType: AttachmentType.video,
+              status: MessageStatus.failed,
+            );
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error uploading video: $e');
+      // Mark as failed
+      setState(() {
+        final index = _messages.indexWhere((m) =>
+            m.timestamp == message.timestamp &&
+            m.attachmentType == AttachmentType.video);
+        if (index != -1) {
+          _messages[index] = ChatMessage(
+            text: message.text,
+            isCustomer: message.isCustomer,
+            timestamp: message.timestamp,
+            videoFile: message.videoFile,
+            attachmentType: AttachmentType.video,
+            status: MessageStatus.failed,
+          );
+        }
+      });
+    }
   }
 
   Future<void> _pickDocument() async {
@@ -1290,22 +1508,124 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final fileInfo = AttachmentService.getFileInfo(documentFile);
 
-    // Create new document message with pending status
+    // Create new document message with uploading status
     final newMessage = ChatMessage(
       text: '📄 ${fileInfo['fileName']}',
       isCustomer: true,
       timestamp: DateTime.now(),
-      documentFile: documentFile,
+      documentFile: documentFile,  // Temp file - will be replaced with URL
       attachmentType: AttachmentType.document,
-      status: MessageStatus.pending, // Start as pending
+      status: MessageStatus.uploading, // Show as uploading with spinner
     );
 
-    // Add message immediately
+    // Add message immediately (shows temp preview with spinner)
     await _addMessage(newMessage);
     _scrollToBottom();
 
-    // Send in bulk with all pending messages
-    await _sendBulkMessages(newMessage);
+    // Upload in background - user can continue typing
+    _uploadDocumentInBackground(newMessage, documentFile);
+  }
+
+  Future<void> _uploadDocumentInBackground(ChatMessage message, File documentFile) async {
+    try {
+      final user = await StorageService.getUser();
+      if (user == null) return;
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(_n8nDocumentUrl),
+      );
+
+      request.headers.addAll({
+        'Authorization': _getBasicAuthHeader(),
+        'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
+      });
+
+      request.files.add(await http.MultipartFile.fromPath('document', documentFile.path));
+      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.fields['phoneNumber'] = user.phoneNumber;
+      request.fields['name'] = user.name;
+      request.fields['companyName'] = user.companyName;
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        debugPrint('DEBUG: Document upload successful, status: ${response.statusCode}');
+        debugPrint('DEBUG: Response body: ${response.body}');
+
+        // Parse Nextcloud metadata from webhook response
+        final metadata = _parseMediaResponse(response.body);
+        debugPrint('DEBUG: Metadata parsed: ${metadata != null}');
+
+        if (metadata != null) {
+          debugPrint('DEBUG: Updating document message with metadata...');
+
+          // Update message: replace temp file with Nextcloud metadata
+          setState(() {
+            final index = _messages.indexWhere((m) =>
+                m.timestamp == message.timestamp &&
+                m.attachmentType == AttachmentType.document);
+            debugPrint('DEBUG: Found message at index: $index');
+
+            if (index != -1) {
+              _messages[index] = ChatMessage(
+                text: message.text,
+                isCustomer: message.isCustomer,
+                timestamp: message.timestamp,
+                documentFile: null,  // Remove temp file
+                attachmentType: AttachmentType.document,
+                status: MessageStatus.sent,  // Mark as sent
+                mediaMetadata: metadata,  // Add Nextcloud data
+              );
+              debugPrint('DEBUG: Document updated with storage_url: ${metadata.storageUrl}');
+            }
+          });
+
+          // Save updated message to storage
+          await _saveMessages();
+          debugPrint('DEBUG: Messages saved to storage');
+        } else {
+          debugPrint('DEBUG: Metadata was null - response not parsed correctly');
+        }
+      } else {
+        debugPrint('DEBUG: Upload failed with status: ${response.statusCode}');
+        // Mark upload as failed
+        setState(() {
+          final index = _messages.indexWhere((m) =>
+              m.timestamp == message.timestamp &&
+              m.attachmentType == AttachmentType.document);
+          if (index != -1) {
+            _messages[index] = ChatMessage(
+              text: message.text,
+              isCustomer: message.isCustomer,
+              timestamp: message.timestamp,
+              documentFile: message.documentFile,
+              attachmentType: AttachmentType.document,
+              status: MessageStatus.failed,
+            );
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error uploading document: $e');
+      // Mark as failed
+      setState(() {
+        final index = _messages.indexWhere((m) =>
+            m.timestamp == message.timestamp &&
+            m.attachmentType == AttachmentType.document);
+        if (index != -1) {
+          _messages[index] = ChatMessage(
+            text: message.text,
+            isCustomer: message.isCustomer,
+            timestamp: message.timestamp,
+            documentFile: message.documentFile,
+            attachmentType: AttachmentType.document,
+            status: MessageStatus.failed,
+          );
+        }
+      });
+    }
   }
 
   void _onTextChanged(String text) {
@@ -2798,6 +3118,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     return ChatBubble(
                       message: _messages[index],
                       onImageLongPress: _showImageDeleteDialog,
+                      onDocumentLongPress: _showDocumentDeleteDialog,
+                      onVideoLongPress: _showVideoDeleteDialog,
                     );
                   },
                 ),
@@ -2974,8 +3296,9 @@ class MediaMetadata {
   final String id;
   final String sessionId;
   final String filename;
-  final String description;
-  final String seoTitle;
+  final String? description;  // Only for images
+  final String? seoTitle;     // Only for images
+  final String? mimeType;     // Only for documents/videos
   final String storageUrl;
   final DateTime createdAt;
 
@@ -2983,8 +3306,9 @@ class MediaMetadata {
     required this.id,
     required this.sessionId,
     required this.filename,
-    required this.description,
-    required this.seoTitle,
+    this.description,
+    this.seoTitle,
+    this.mimeType,
     required this.storageUrl,
     required this.createdAt,
   });
@@ -2996,8 +3320,9 @@ class MediaMetadata {
       id: json['id'] ?? '',
       sessionId: json['session_id'] ?? '',
       filename: json['filename'] ?? '',
-      description: json['description'] ?? '',
-      seoTitle: json['seo_title'] ?? '',
+      description: json['description'],  // Optional - only for images
+      seoTitle: json['seo_title'],       // Optional - only for images
+      mimeType: json['mime_type'],       // Optional - only for docs/videos
       storageUrl: json['storage_url'] ?? '',
       createdAt: json['created_at'] != null
         ? DateTime.parse(json['created_at'])
@@ -3010,8 +3335,9 @@ class MediaMetadata {
       'id': id,
       'session_id': sessionId,
       'filename': filename,
-      'description': description,
-      'seo_title': seoTitle,
+      if (description != null) 'description': description,
+      if (seoTitle != null) 'seo_title': seoTitle,
+      if (mimeType != null) 'mime_type': mimeType,
       'storage_url': storageUrl,
       'created_at': createdAt.toIso8601String(),
     };
@@ -3126,8 +3452,16 @@ class ChatMessage {
 class ChatBubble extends StatelessWidget {
   final ChatMessage message;
   final Function(ChatMessage)? onImageLongPress;
+  final Function(ChatMessage)? onDocumentLongPress;
+  final Function(ChatMessage)? onVideoLongPress;
 
-  const ChatBubble({super.key, required this.message, this.onImageLongPress});
+  const ChatBubble({
+    super.key,
+    required this.message,
+    this.onImageLongPress,
+    this.onDocumentLongPress,
+    this.onVideoLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -3205,21 +3539,25 @@ class ChatBubble extends StatelessWidget {
                         )
                       else if (message.attachmentType ==
                               AttachmentType.document &&
-                          message.documentFile != null)
+                          (message.documentFile != null || message.mediaMetadata != null))
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             DocumentMessageWidget(
-                              documentFile: message.documentFile!,
+                              documentFile: message.documentFile,
+                              documentUrl: message.mediaMetadata?.previewUrl,
                               isCustomer: message.isCustomer,
-                              fileName:
-                                  AttachmentService.getFileInfo(
-                                    message.documentFile!,
-                                  )['fileName'],
-                              fileSize:
-                                  AttachmentService.getFileInfo(
-                                    message.documentFile!,
-                                  )['size'],
+                              fileName: message.mediaMetadata?.filename ??
+                                  (message.documentFile != null && message.documentFile!.existsSync()
+                                    ? AttachmentService.getFileInfo(message.documentFile!)['fileName']
+                                    : 'Document'),
+                              fileSize: message.documentFile != null && message.documentFile!.existsSync()
+                                  ? AttachmentService.getFileInfo(message.documentFile!)['size']
+                                  : 0,
+                              isUploading: message.status == MessageStatus.uploading,
+                              onLongPress: onDocumentLongPress != null
+                                ? () => onDocumentLongPress!(message)
+                                : null,
                             ),
                             const SizedBox(height: 4),
                             Text(

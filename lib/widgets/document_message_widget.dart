@@ -3,26 +3,37 @@ import 'dart:io';
 import '../services/attachment_service.dart';
 
 class DocumentMessageWidget extends StatelessWidget {
-  final File documentFile;
+  final File? documentFile;  // Temp file (for uploading state)
+  final String? documentUrl;  // Nextcloud URL (after upload)
   final bool isCustomer;
   final String fileName;
   final int fileSize;
+  final bool isUploading;  // Show spinner overlay
+  final VoidCallback? onLongPress;  // Delete callback
 
   const DocumentMessageWidget({
     super.key,
-    required this.documentFile,
+    this.documentFile,
+    this.documentUrl,
     required this.isCustomer,
     required this.fileName,
     required this.fileSize,
+    this.isUploading = false,
+    this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fileInfo = AttachmentService.getFileInfo(documentFile);
-    final fileIcon = AttachmentService.getFileIcon(fileInfo['extension']);
+    // Get file info from temp file if available, otherwise use fileName
+    final fileExtension = documentFile != null
+        ? AttachmentService.getFileInfo(documentFile!)['extension']
+        : fileName.split('.').last;
+    final fileIcon = AttachmentService.getFileIcon(fileExtension);
     final formattedSize = AttachmentService.formatFileSize(fileSize);
 
-    return Container(
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: Container(
       constraints: const BoxConstraints(maxWidth: 280),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -78,12 +89,20 @@ class DocumentMessageWidget extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Icon(
-            Icons.description,
-            color: isCustomer ? Colors.white70 : Colors.grey.shade600,
-            size: 16,
-          ),
+          // Show spinner if uploading, otherwise icon
+          isUploading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                Icons.description,
+                color: isCustomer ? Colors.white70 : Colors.grey.shade600,
+                size: 16,
+              ),
         ],
+      ),
       ),
     );
   }

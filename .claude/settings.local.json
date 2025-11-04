@@ -3,7 +3,12 @@
     "allow": [
       "Bash(awk:*)",
       "Bash(cat:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git log:*)",
+      "Bash(flutter run)",
+      "Bash(git push)",
+      "mcp__flutter-dart__analyze_files",
+      "mcp__flutter-dart__hot_reload"
     ],
     "deny": [],
     "ask": []
