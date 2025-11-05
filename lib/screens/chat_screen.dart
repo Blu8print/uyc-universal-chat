@@ -3139,6 +3139,60 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Widget _buildEmailSentBanner() {
+    // Show banner if email was already sent when chat was opened
+    if (SessionService.currentSessionData?.emailSent != true) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFC6F6D5), width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
+              color: Color(0xFF22C55E),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check, color: Colors.white, size: 12),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Dit gesprek is al doorgestuurd',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF15803D),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Wil je nog iets toevoegen? Dat kan...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF166534),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSendToTeamBanner() {
     if (!_showSendToTeamBanner) return const SizedBox.shrink();
 
@@ -3243,11 +3297,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   padding: const EdgeInsets.all(16),
                   itemCount: _messages.length + (_isLoading ? 1 : 0),
                   itemBuilder: (context, index) {
-                    if (index == _messages.length && _isLoading) {
+                    // Show typing indicator at bottom (first item in reverse list) when loading
+                    if (index == 0 && _isLoading) {
                       return TypingIndicator(isUploadingFile: _isUploadingFile);
                     }
+                    // Adjust message index to account for typing indicator
+                    final messageIndex = _isLoading ? index - 1 : index;
                     return ChatBubble(
-                      message: _messages[index],
+                      message: _messages[messageIndex],
                       onImageLongPress: _showImageDeleteDialog,
                       onDocumentLongPress: _showDocumentDeleteDialog,
                       onDocumentTap: _openDocument,
@@ -3259,6 +3316,8 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ),
+
+            _buildEmailSentBanner(),
 
             _buildSendToTeamBanner(),
 
