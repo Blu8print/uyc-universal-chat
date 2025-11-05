@@ -230,10 +230,6 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         _scrollToBottom();
 
-        if (messages.isNotEmpty) {
-          _displaySendToTeamBanner();
-        }
-
         return;
       }
     }
@@ -1054,6 +1050,9 @@ class _ChatScreenState extends State<ChatScreen> {
           await _saveMessages();
           debugPrint('DEBUG: Messages saved to storage');
 
+          // Show "Team inlichten" banner after successful upload
+          _displaySendToTeamBanner();
+
           // Description stored in metadata but not displayed as separate message
         } else {
           debugPrint('DEBUG: Metadata was null - response not parsed correctly');
@@ -1559,6 +1558,9 @@ class _ChatScreenState extends State<ChatScreen> {
           // Save updated message to storage
           await _saveMessages();
           debugPrint('DEBUG: Messages saved to storage');
+
+          // Show "Team inlichten" banner after successful upload
+          _displaySendToTeamBanner();
         } else {
           debugPrint('DEBUG: Metadata was null - response not parsed correctly');
         }
@@ -1720,6 +1722,9 @@ class _ChatScreenState extends State<ChatScreen> {
           // Save updated message to storage
           await _saveMessages();
           debugPrint('DEBUG: Messages saved to storage');
+
+          // Show "Team inlichten" banner after successful upload
+          _displaySendToTeamBanner();
         } else {
           debugPrint('DEBUG: Metadata was null - response not parsed correctly');
         }
@@ -3179,7 +3184,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Wil je nog iets toevoegen? Dat kan...',
+                  'Wil je nog iets toevoegen? Dat kan, type het hieronder!',
                   style: TextStyle(
                     fontSize: 13,
                     color: Color(0xFF166534),
