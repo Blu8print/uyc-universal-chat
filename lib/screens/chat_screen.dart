@@ -1128,6 +1128,30 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _openDocument(ChatMessage message) async {
+    if (message.mediaMetadata == null) return;
+
+    try {
+      final Uri documentUri = Uri.parse(message.mediaMetadata!.storageUrl);
+      if (await canLaunchUrl(documentUri)) {
+        await launchUrl(documentUri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Kan document niet openen')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error opening document: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error bij openen document: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _playVideo(ChatMessage message) async {
     if (message.mediaMetadata == null) return;
 
@@ -3173,6 +3197,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       message: _messages[index],
                       onImageLongPress: _showImageDeleteDialog,
                       onDocumentLongPress: _showDocumentDeleteDialog,
+                      onDocumentTap: _openDocument,
                       onVideoLongPress: _showVideoDeleteDialog,
                       onVideoTap: _playVideo,
                     );
@@ -3511,6 +3536,7 @@ class ChatBubble extends StatelessWidget {
   final ChatMessage message;
   final Function(ChatMessage)? onImageLongPress;
   final Function(ChatMessage)? onDocumentLongPress;
+  final Function(ChatMessage)? onDocumentTap;
   final Function(ChatMessage)? onVideoLongPress;
   final Function(ChatMessage)? onVideoTap;
 
@@ -3519,6 +3545,7 @@ class ChatBubble extends StatelessWidget {
     required this.message,
     this.onImageLongPress,
     this.onDocumentLongPress,
+    this.onDocumentTap,
     this.onVideoLongPress,
     this.onVideoTap,
   });
@@ -3615,6 +3642,9 @@ class ChatBubble extends StatelessWidget {
                                   ? AttachmentService.getFileInfo(message.documentFile!)['size']
                                   : 0,
                               isUploading: message.status == MessageStatus.uploading,
+                              onTap: onDocumentTap != null
+                                ? () => onDocumentTap!(message)
+                                : null,
                               onLongPress: onDocumentLongPress != null
                                 ? () => onDocumentLongPress!(message)
                                 : null,

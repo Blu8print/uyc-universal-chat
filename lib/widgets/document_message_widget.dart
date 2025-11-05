@@ -9,6 +9,7 @@ class DocumentMessageWidget extends StatelessWidget {
   final String fileName;
   final int fileSize;
   final bool isUploading;  // Show spinner overlay
+  final VoidCallback? onTap;  // Open document callback
   final VoidCallback? onLongPress;  // Delete callback
 
   const DocumentMessageWidget({
@@ -19,6 +20,7 @@ class DocumentMessageWidget extends StatelessWidget {
     required this.fileName,
     required this.fileSize,
     this.isUploading = false,
+    this.onTap,
     this.onLongPress,
   });
 
@@ -32,6 +34,7 @@ class DocumentMessageWidget extends StatelessWidget {
     final formattedSize = AttachmentService.formatFileSize(fileSize);
 
     return GestureDetector(
+      onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
       constraints: const BoxConstraints(maxWidth: 280),
