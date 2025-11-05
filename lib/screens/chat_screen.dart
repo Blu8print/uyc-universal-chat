@@ -80,7 +80,6 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _bannerAvailable = false;
   bool _userTypedAfterEmailSent = false;
   Timer? _bannerTimer;
-  int _userMessageCount = 0;  // Track user messages to show banner after 3
   String _chatTitle = 'Chat';
   String? _chatType;
   bool _audioEnabled = false;
@@ -257,6 +256,17 @@ class _ChatScreenState extends State<ChatScreen> {
     return true;
   }
 
+  // Detect and strip {show_banner} tag from AI response text
+  // Returns cleaned text and flag indicating if banner should be shown
+  Map<String, dynamic> _detectAndStripBannerTag(String text) {
+    final hasBannerTag = text.contains('{show_banner}');
+    final cleanText = text.replaceAll('{show_banner}', '').trim();
+    return {
+      'text': cleanText,
+      'shouldShowBanner': hasBannerTag,
+    };
+  }
+
   // Convert ChatMessage to server-friendly format for webhook
   // Includes: text, isCustomer, timestamp, attachmentType, mediaMetadata
   // Excludes: local file paths, status, fromFCM (not needed for server restoration)
@@ -291,10 +301,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _addMessage(ChatMessage message) async {
     setState(() {
       _messages.insert(0,message);
-      // Increment user message count for banner display after 3 messages
-      if (message.isCustomer) {
-        _userMessageCount++;
-      }
     });
     await _saveMessages();
   }
@@ -313,8 +319,13 @@ class _ChatScreenState extends State<ChatScreen> {
       if (sessionId != null &&
           sessionId == SessionService.currentSessionId &&
           messageText != null) {
+        // Detect and strip banner tag
+        final result = _detectAndStripBannerTag(messageText);
+        final cleanText = result['text'];
+        final shouldShowBanner = result['shouldShowBanner'];
+
         final fcmMessage = ChatMessage(
-          text: messageText,
+          text: cleanText,
           isCustomer: false, // FCM messages are from the bot/system
           timestamp: DateTime.now(),
           status: MessageStatus.sent,
@@ -323,6 +334,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
         _addMessage(fcmMessage);
         _scrollToBottom();
+
+        // Show banner if tag was detected
+        if (shouldShowBanner) {
+          _displaySendToTeamBanner();
+        }
       }
     } catch (e) {
       debugPrint('Error handling FCM message: $e');
@@ -1896,10 +1912,15 @@ class _ChatScreenState extends State<ChatScreen> {
         'Bericht ontvangen en verwerkt',
       );
 
+      // Detect and strip banner tag from response
+      final result = _detectAndStripBannerTag(botResponse);
+      final cleanText = result['text'];
+      final shouldShowBanner = result['shouldShowBanner'];
+
       setState(() {
         _messages.insert(0,
           ChatMessage(
-            text: botResponse,
+            text: cleanText,
             isCustomer: false,
             timestamp: DateTime.now(),
             status: MessageStatus.sent,
@@ -1910,7 +1931,10 @@ class _ChatScreenState extends State<ChatScreen> {
       // Generate and play audio if enabled
       await _generateAndPlayAudio();
 
-      _displaySendToTeamBanner();
+      // Show banner only if tag was detected
+      if (shouldShowBanner) {
+        _displaySendToTeamBanner();
+      }
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -3176,9 +3200,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _displaySendToTeamBanner() {
-    // Only show banner after user has sent 3 or more messages
-    if (_userMessageCount < 3) return;
-
     // Cancel any existing timer
     _bannerTimer?.cancel();
 
