@@ -1135,7 +1135,7 @@ class _ChatScreenState extends State<ChatScreen> {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => VideoPlayerScreen(
-            videoUrl: message.mediaMetadata!.previewUrl,
+            videoUrl: '${message.mediaMetadata!.storageUrl}/download',
             title: message.mediaMetadata!.filename,
           ),
         ),
