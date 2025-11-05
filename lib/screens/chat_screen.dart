@@ -257,6 +257,21 @@ class _ChatScreenState extends State<ChatScreen> {
     return true;
   }
 
+  // Convert ChatMessage to server-friendly format for webhook
+  // Includes: text, isCustomer, timestamp, attachmentType, mediaMetadata
+  // Excludes: local file paths, status, fromFCM (not needed for server restoration)
+  List<Map<String, dynamic>> _convertMessagesToServerFormat() {
+    return _messages
+        .map((msg) => {
+          'text': msg.text,
+          'isCustomer': msg.isCustomer,
+          'timestamp': msg.timestamp.toIso8601String(),
+          'attachmentType': msg.attachmentType.toString(),
+          if (msg.mediaMetadata != null) 'mediaMetadata': msg.mediaMetadata!.toJson(),
+        })
+        .toList();
+  }
+
   // Save messages to storage
   Future<void> _saveMessages() async {
     final sessionId = SessionService.currentSessionId;
@@ -264,9 +279,10 @@ class _ChatScreenState extends State<ChatScreen> {
       final messagesJson = _messages.map((msg) => msg.toJson()).toList();
       await StorageService.saveMessages(sessionId, messagesJson);
 
-      // Update session metadata after sending messages
+      // Update session metadata with messages for webhook
       if (_messages.isNotEmpty) {
-        await SessionService.updateCurrentSession();
+        final serverMessages = _convertMessagesToServerFormat();
+        await SessionService.updateCurrentSession(messages: serverMessages);
       }
     }
   }

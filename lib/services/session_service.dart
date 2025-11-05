@@ -155,9 +155,13 @@ class SessionService {
   }
   
   // Update current session metadata
-  static Future<bool> updateCurrentSession({String? title, String? description}) async {
+  static Future<bool> updateCurrentSession({
+    String? title,
+    String? description,
+    List<Map<String, dynamic>>? messages,
+  }) async {
     if (_currentSessionId == null) return false;
-    
+
     try {
       final user = await StorageService.getUser();
       if (user != null) {
@@ -168,8 +172,9 @@ class SessionService {
           companyName: user.companyName,
           title: title,
           description: description,
+          messages: messages,
         );
-        
+
         if (response.success && response.sessionData != null) {
           _currentSessionData = response.sessionData;
           await StorageService.saveSessionData(response.sessionData!);

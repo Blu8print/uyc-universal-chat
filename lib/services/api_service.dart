@@ -338,6 +338,7 @@ class ApiService {
     String? title,
     String? description,
     bool? emailSent,
+    List<Map<String, dynamic>>? messages,
   }) async {
     try {
       final authBytes = utf8.encode(_sessionAuth);
@@ -354,6 +355,7 @@ class ApiService {
       if (title != null) requestBody['title'] = title;
       if (description != null) requestBody['description'] = description;
       if (emailSent != null) requestBody['emailSent'] = emailSent;
+      if (messages != null) requestBody['messages'] = messages;
       
       final response = await http.post(
         Uri.parse(_sessionsUrl),
