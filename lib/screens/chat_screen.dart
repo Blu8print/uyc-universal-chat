@@ -1416,12 +1416,17 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
+    // Generate thumbnail for display during upload
+    final thumbnailPath = await _generateVideoThumbnail(videoFile);
+    final thumbnailFile = thumbnailPath != null ? File(thumbnailPath) : null;
+
     // Create new video message with uploading status
     final newMessage = ChatMessage(
       text: '🎥 Video',
       isCustomer: true,
       timestamp: DateTime.now(),
       videoFile: videoFile,  // Compressed file - will be replaced with URL
+      videoThumbnailFile: thumbnailFile,  // Temp thumbnail during upload
       attachmentType: AttachmentType.video,
       status: MessageStatus.uploading, // Show as uploading with spinner
     );
@@ -1469,6 +1474,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final user = await StorageService.getUser();
       if (user == null) return;
 
+      // Generate thumbnail before upload
+      final thumbnailPath = await _generateVideoThumbnail(videoFile);
+
       final request = http.MultipartRequest(
         'POST',
         Uri.parse(_n8nVideoUrl),
@@ -1480,6 +1488,17 @@ class _ChatScreenState extends State<ChatScreen> {
       });
 
       request.files.add(await http.MultipartFile.fromPath('video', videoFile.path));
+
+      // Add thumbnail file if generated successfully
+      if (thumbnailPath != null) {
+        request.files.add(await http.MultipartFile.fromPath(
+          'thumbnail',
+          thumbnailPath,
+          filename: 'thumbnail.jpg',
+        ));
+        request.fields['hasThumbnail'] = 'true';
+      }
+
       request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
       request.fields['phoneNumber'] = user.phoneNumber;
       request.fields['name'] = user.name;
@@ -1499,9 +1518,6 @@ class _ChatScreenState extends State<ChatScreen> {
         if (metadata != null) {
           debugPrint('DEBUG: Updating video message with metadata...');
 
-          // Generate thumbnail before updating message
-          final thumbnailPath = await _generateVideoThumbnail(videoFile);
-
           // Update message: replace temp file with Nextcloud metadata
           setState(() {
             final index = _messages.indexWhere((m) =>
@@ -1514,11 +1530,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 text: message.text,
                 isCustomer: message.isCustomer,
                 timestamp: message.timestamp,
-                videoFile: null,  // Remove temp file
-                videoThumbnailPath: thumbnailPath,  // Add thumbnail path
+                videoFile: null,  // Remove temp video file
+                videoThumbnailFile: null,  // Remove temp thumbnail file (will use mediaMetadata.thumbnailPreviewUrl)
                 attachmentType: AttachmentType.video,
                 status: MessageStatus.sent,  // Mark as sent
-                mediaMetadata: metadata,  // Add Nextcloud data
+                mediaMetadata: metadata,  // Add Nextcloud data with thumbnail URL
               );
               debugPrint('DEBUG: Video updated with storage_url: ${metadata.storageUrl}');
             }
@@ -3395,6 +3411,7 @@ class MediaMetadata {
   final String? seoTitle;     // Only for images
   final String? mimeType;     // Only for documents/videos
   final String storageUrl;
+  final String? thumbnailUrl; // Only for videos
   final DateTime createdAt;
 
   MediaMetadata({
@@ -3405,10 +3422,14 @@ class MediaMetadata {
     this.seoTitle,
     this.mimeType,
     required this.storageUrl,
+    this.thumbnailUrl,
     required this.createdAt,
   });
 
   String get previewUrl => '$storageUrl/preview';
+
+  // For videos: use thumbnail_url + '/preview' to show video thumbnail
+  String? get thumbnailPreviewUrl => thumbnailUrl != null ? '$thumbnailUrl/preview' : null;
 
   factory MediaMetadata.fromJson(Map<String, dynamic> json) {
     return MediaMetadata(
@@ -3419,6 +3440,7 @@ class MediaMetadata {
       seoTitle: json['seo_title'],       // Optional - only for images
       mimeType: json['mime_type'],       // Optional - only for docs/videos
       storageUrl: json['storage_url'] ?? '',
+      thumbnailUrl: json['thumbnail_url'],  // Optional - only for videos
       createdAt: json['created_at'] != null
         ? DateTime.parse(json['created_at'])
         : DateTime.now(),
@@ -3434,6 +3456,7 @@ class MediaMetadata {
       if (seoTitle != null) 'seo_title': seoTitle,
       if (mimeType != null) 'mime_type': mimeType,
       'storage_url': storageUrl,
+      if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -3449,7 +3472,7 @@ class ChatMessage {
   final File? imageFile;
   final File? documentFile;
   final File? videoFile;
-  final String? videoThumbnailPath;
+  final File? videoThumbnailFile;  // Local temp thumbnail during upload
   final AttachmentType attachmentType;
   final MessageStatus status;
   final bool fromFCM;
@@ -3464,7 +3487,7 @@ class ChatMessage {
     this.imageFile,
     this.documentFile,
     this.videoFile,
-    this.videoThumbnailPath,
+    this.videoThumbnailFile,
     this.attachmentType = AttachmentType.none,
     this.status = MessageStatus.pending,
     this.fromFCM = false,
@@ -3482,7 +3505,7 @@ class ChatMessage {
       'imageFilePath': imageFile?.path,
       'documentFilePath': documentFile?.path,
       'videoFilePath': videoFile?.path,
-      'videoThumbnailPath': videoThumbnailPath,
+      'videoThumbnailFilePath': videoThumbnailFile?.path,
       'attachmentType': attachmentType.toString(),
       'status': status.toString(),
       'fromFCM': fromFCM,
@@ -3506,7 +3529,8 @@ class ChatMessage {
               : null,
       videoFile:
           json['videoFilePath'] != null ? File(json['videoFilePath']) : null,
-      videoThumbnailPath: json['videoThumbnailPath'],
+      videoThumbnailFile:
+          json['videoThumbnailFilePath'] != null ? File(json['videoThumbnailFilePath']) : null,
       attachmentType: _parseAttachmentType(json['attachmentType']),
       status: _parseMessageStatus(json['status']),
       fromFCM: json['fromFCM'] ?? false,
@@ -3684,7 +3708,8 @@ class ChatBubble extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             VideoMessageWidget(
-                              thumbnailPath: message.videoThumbnailPath,
+                              thumbnailFile: message.videoThumbnailFile,
+                              thumbnailUrl: message.mediaMetadata?.thumbnailPreviewUrl,
                               isCustomer: message.isCustomer,
                               isUploading: message.status == MessageStatus.uploading,
                               title: message.mediaMetadata!.filename,

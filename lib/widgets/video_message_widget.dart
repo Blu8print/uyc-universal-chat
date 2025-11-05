@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 
 class VideoMessageWidget extends StatelessWidget {
-  final String? thumbnailPath;  // Local thumbnail file path
+  final File? thumbnailFile;  // Local temp thumbnail during upload
+  final String? thumbnailUrl;  // Nextcloud thumbnail URL after upload
   final bool isCustomer;
   final bool isUploading;  // Show spinner overlay
   final String? title;  // Filename/title to display on thumbnail
@@ -11,7 +12,8 @@ class VideoMessageWidget extends StatelessWidget {
 
   const VideoMessageWidget({
     super.key,
-    this.thumbnailPath,
+    this.thumbnailFile,
+    this.thumbnailUrl,
     required this.isCustomer,
     this.isUploading = false,
     this.title,
@@ -40,10 +42,28 @@ class VideoMessageWidget extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Stack(
             children: [
-              // Show thumbnail from local file if available
-              if (thumbnailPath != null && File(thumbnailPath!).existsSync())
+              // Show thumbnail from URL if available (after upload)
+              if (thumbnailUrl != null)
+                Image.network(
+                  thumbnailUrl!,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Container(
+                      width: 250,
+                      height: 200,
+                      color: Colors.grey.shade200,
+                      child: const Center(child: CircularProgressIndicator()),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildErrorPlaceholder();
+                  },
+                )
+              // Otherwise show from temp file (during upload)
+              else if (thumbnailFile != null && thumbnailFile!.existsSync())
                 Image.file(
-                  File(thumbnailPath!),
+                  thumbnailFile!,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     return _buildErrorPlaceholder();
