@@ -10,14 +10,15 @@ class AudioRecordingService {
   bool _isRecording = false;
   DateTime? _recordingStartTime;
   Timer? _fileSizeCheckTimer;
-  
+
   static const int maxFileSizeBytes = 23 * 1024 * 1024; // 23MB in bytes
 
   bool get isRecording => _isRecording;
-  Duration get recordingDuration => _recordingStartTime != null 
-      ? DateTime.now().difference(_recordingStartTime!)
-      : Duration.zero;
-  
+  Duration get recordingDuration =>
+      _recordingStartTime != null
+          ? DateTime.now().difference(_recordingStartTime!)
+          : Duration.zero;
+
   Future<int> get currentFileSize async {
     if (_currentRecordingPath == null) return 0;
     try {
@@ -33,10 +34,10 @@ class AudioRecordingService {
 
   Future<bool> requestPermission() async {
     debugPrint('DEBUG: Checking microphone permission with record package...');
-    
+
     final hasPermission = await _recorder.hasPermission();
     debugPrint('DEBUG: Record package permission result: $hasPermission');
-    
+
     return hasPermission;
   }
 
@@ -61,10 +62,10 @@ class AudioRecordingService {
 
       _isRecording = true;
       _recordingStartTime = DateTime.now();
-      
+
       // Start monitoring file size
       _startFileSizeMonitoring();
-      
+
       return true;
     } catch (e) {
       // Error starting recording: $e
@@ -105,7 +106,7 @@ class AudioRecordingService {
         _stopFileSizeMonitoring();
         _isRecording = false;
         _recordingStartTime = null;
-        
+
         if (_currentRecordingPath != null) {
           final file = File(_currentRecordingPath!);
           if (await file.exists()) {
@@ -124,12 +125,14 @@ class AudioRecordingService {
   }
 
   void _startFileSizeMonitoring() {
-    _fileSizeCheckTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+    _fileSizeCheckTimer = Timer.periodic(const Duration(seconds: 1), (
+      timer,
+    ) async {
       if (!_isRecording || _currentRecordingPath == null) {
         timer.cancel();
         return;
       }
-      
+
       try {
         final file = File(_currentRecordingPath!);
         if (await file.exists()) {
@@ -144,7 +147,7 @@ class AudioRecordingService {
       }
     });
   }
-  
+
   void _stopFileSizeMonitoring() {
     _fileSizeCheckTimer?.cancel();
     _fileSizeCheckTimer = null;

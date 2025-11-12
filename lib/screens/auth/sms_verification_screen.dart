@@ -69,10 +69,11 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
         );
       } else {
         _failedAttempts++;
-        
+
         if (_failedAttempts >= 3) {
           setState(() {
-            _errorMessage = 'Te veel ongeldige pogingen. Bel 085 - 330 7500 voor ondersteuning.';
+            _errorMessage =
+                'Te veel ongeldige pogingen. Bel 085 - 330 7500 voor ondersteuning.';
           });
         } else {
           setState(() {
@@ -89,7 +90,11 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
       _errorMessage = null;
     });
 
-    final response = await AuthService.sendVerificationCode(widget.phoneNumber, widget.name, widget.email);
+    final response = await AuthService.sendVerificationCode(
+      widget.phoneNumber,
+      widget.name,
+      widget.email,
+    );
 
     if (mounted) {
       setState(() {
@@ -123,33 +128,29 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
-        child: SingleChildScrollView(  // Make it scrollable
+        child: SingleChildScrollView(
+          // Make it scrollable
           padding: const EdgeInsets.all(24.0),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight: MediaQuery.of(context).size.height - 
-                         MediaQuery.of(context).padding.top - 
-                         kToolbarHeight - 48, // Account for padding and app bar
+              minHeight:
+                  MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).padding.top -
+                  kToolbarHeight -
+                  48, // Account for padding and app bar
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 20),
-                
+
                 // Instructions
-                const Icon(
-                  Icons.sms,
-                  size: 60,
-                  color: Color(0xFFCC0001),
-                ),
+                const Icon(Icons.sms, size: 60, color: Color(0xFFCC0001)),
                 const SizedBox(height: 24),
                 Text(
                   'SMS-code verzonden naar',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -172,7 +173,7 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                
+
                 // SMS code input
                 TextField(
                   controller: _codeController,
@@ -185,14 +186,18 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: MediaQuery.of(context).size.width < 360 ? 4 : 8,
+                    letterSpacing:
+                        MediaQuery.of(context).size.width < 360 ? 4 : 8,
                   ),
                   maxLines: 1,
                   decoration: const InputDecoration(
                     labelText: 'Verificatiecode',
                     hintText: '123456',
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                   ),
                   onChanged: (value) {
                     if (_errorMessage != null) {
@@ -202,7 +207,7 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
                     }
                   },
                 ),
-                
+
                 // Error message
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 16),
@@ -215,17 +220,14 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
                     ),
                     child: Text(
                       _errorMessage!,
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: Colors.red, fontSize: 14),
                       textAlign: TextAlign.center,
                     ),
                   ),
                 ],
-                
+
                 const SizedBox(height: 32),
-                
+
                 // Verify button
                 ElevatedButton(
                   onPressed: _isLoading ? null : _verifyCode,
@@ -238,48 +240,45 @@ class _SmsVerificationScreenState extends State<SmsVerificationScreen> {
                     ),
                     disabledBackgroundColor: Colors.grey.shade300,
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  child:
+                      _isLoading
+                          ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                          : const Text(
+                            'Verifiëren en Registreren',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        )
-                      : const Text(
-                          'Verifiëren en Registreren',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Resend button
                 TextButton(
                   onPressed: _isLoading ? null : _resendCode,
                   child: const Text(
                     'Nieuwe code verzenden',
-                    style: TextStyle(
-                      color: Color(0xFFCC0001),
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Color(0xFFCC0001), fontSize: 14),
                   ),
                 ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // Help text
                 Text(
                   'De SMS-code is 10 minuten geldig',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ],
             ),

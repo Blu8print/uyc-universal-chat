@@ -3,11 +3,16 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // Your production URLs
-  static const String _sendSmsUrl = 'https://automation.kwaaijongens.nl/webhook/send-sms';
-  static const String _verifySmsUrl = 'https://automation.kwaaijongens.nl/webhook/verify-sms';
-  static const String _versionCheckUrl = 'https://automation.kwaaijongens.nl/webhook/version-check';
-  static const String _fcmTokenUrl = 'https://automation.kwaaijongens.nl/webhook/fcm-token';
-  static const String _sessionsUrl = 'https://automation.kwaaijongens.nl/webhook/sessions';
+  static const String _sendSmsUrl =
+      'https://automation.kwaaijongens.nl/webhook/send-sms';
+  static const String _verifySmsUrl =
+      'https://automation.kwaaijongens.nl/webhook/verify-sms';
+  static const String _versionCheckUrl =
+      'https://automation.kwaaijongens.nl/webhook/version-check';
+  static const String _fcmTokenUrl =
+      'https://automation.kwaaijongens.nl/webhook/fcm-token';
+  static const String _sessionsUrl =
+      'https://automation.kwaaijongens.nl/webhook/sessions';
 
   // Authentication credentials
   static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
@@ -18,35 +23,50 @@ class ApiService {
     final authBytes = utf8.encode(_basicAuth);
     return 'Basic ${base64Encode(authBytes)}';
   }
-  
+
   // Send SMS verification code
-  static Future<ApiResponse> sendSmsCode(String phoneNumber, String name, String email) async {
+  static Future<ApiResponse> sendSmsCode(
+    String phoneNumber,
+    String name,
+    String email,
+  ) async {
     try {
-      final response = await http.post(
-        Uri.parse(_sendSmsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-        },
-        body: jsonEncode({
-          'phoneNumber': phoneNumber,
-          'name': name,
-          'email': email,
-        }),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .post(
+            Uri.parse(_sendSmsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': _getBasicAuthHeader(),
+            },
+            body: jsonEncode({
+              'phoneNumber': phoneNumber,
+              'name': name,
+              'email': email,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return ApiResponse(success: true, message: 'SMS-code verzonden');
       } else if (response.statusCode == 400) {
         return ApiResponse(success: false, message: 'Ongeldig telefoonnummer');
       } else if (response.statusCode == 429) {
-        return ApiResponse(success: false, message: 'Te veel pogingen. Probeer later opnieuw.');
+        return ApiResponse(
+          success: false,
+          message: 'Te veel pogingen. Probeer later opnieuw.',
+        );
       } else {
-        return ApiResponse(success: false, message: 'Kon SMS niet verzenden. Bel 085 - 330 7500');
+        return ApiResponse(
+          success: false,
+          message: 'Kon SMS niet verzenden. Bel 085 - 330 7500',
+        );
       }
     } catch (e) {
-      return ApiResponse(success: false, message: 'Netwerkfout. Controleer je internetverbinding.');
+      return ApiResponse(
+        success: false,
+        message: 'Netwerkfout. Controleer je internetverbinding.',
+      );
     }
   }
 
@@ -58,28 +78,30 @@ class ApiService {
     required String smsCode,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse(_verifySmsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-        },
-        body: jsonEncode({
-          'phoneNumber': phoneNumber,
-          'name': name,
-          'email': email,
-          'smsCode': smsCode,
-        }),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .post(
+            Uri.parse(_verifySmsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': _getBasicAuthHeader(),
+            },
+            body: jsonEncode({
+              'phoneNumber': phoneNumber,
+              'name': name,
+              'email': email,
+              'smsCode': smsCode,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        
+
         // Handle array response format
         if (responseData is List && responseData.isNotEmpty) {
           final data = responseData[0];
-          
+
           // Check the success field from the response data
           if (data['success'] == true) {
             return ApiResponse(
@@ -96,22 +118,37 @@ class ApiService {
             );
           } else {
             return ApiResponse(
-              success: false, 
-              message: data['message'] ?? 'Verificatie mislukt'
+              success: false,
+              message: data['message'] ?? 'Verificatie mislukt',
             );
           }
         } else {
-          return ApiResponse(success: false, message: 'Ongeldig response format');
+          return ApiResponse(
+            success: false,
+            message: 'Ongeldig response format',
+          );
         }
       } else if (response.statusCode == 400) {
-        return ApiResponse(success: false, message: 'Ongeldige verificatiecode');
+        return ApiResponse(
+          success: false,
+          message: 'Ongeldige verificatiecode',
+        );
       } else if (response.statusCode == 429) {
-        return ApiResponse(success: false, message: 'Te veel pogingen. Bel 085 - 330 7500');
+        return ApiResponse(
+          success: false,
+          message: 'Te veel pogingen. Bel 085 - 330 7500',
+        );
       } else {
-        return ApiResponse(success: false, message: 'Registratie mislukt. Bel 085 - 330 7500');
+        return ApiResponse(
+          success: false,
+          message: 'Registratie mislukt. Bel 085 - 330 7500',
+        );
       }
     } catch (e) {
-      return ApiResponse(success: false, message: 'Netwerkfout. Controleer je internetverbinding.');
+      return ApiResponse(
+        success: false,
+        message: 'Netwerkfout. Controleer je internetverbinding.',
+      );
     }
   }
 
@@ -123,39 +160,41 @@ class ApiService {
     String? phoneNumber,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse(_fcmTokenUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-          'X-Session-ID': sessionId,
-        },
-        body: jsonEncode({
-          'action': 'registerToken',
-          'fcmToken': fcmToken,
-          'sessionId': sessionId,
-          'platform': platform,
-          'phoneNumber': phoneNumber,
-          'timestamp': DateTime.now().toIso8601String(),
-        }),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .post(
+            Uri.parse(_fcmTokenUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': _getBasicAuthHeader(),
+              'X-Session-ID': sessionId,
+            },
+            body: jsonEncode({
+              'action': 'registerToken',
+              'fcmToken': fcmToken,
+              'sessionId': sessionId,
+              'platform': platform,
+              'phoneNumber': phoneNumber,
+              'timestamp': DateTime.now().toIso8601String(),
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return ApiResponse(
-          success: true, 
-          message: 'FCM token registered successfully'
+          success: true,
+          message: 'FCM token registered successfully',
         );
       } else {
         return ApiResponse(
-          success: false, 
-          message: 'Failed to register FCM token: ${response.statusCode}'
+          success: false,
+          message: 'Failed to register FCM token: ${response.statusCode}',
         );
       }
     } catch (e) {
       return ApiResponse(
-        success: false, 
-        message: 'Network error registering FCM token: $e'
+        success: false,
+        message: 'Network error registering FCM token: $e',
       );
     }
   }
@@ -185,19 +224,21 @@ class ApiService {
         requestBody['chatType'] = chatType;
       }
 
-      final response = await http.post(
-        Uri.parse(_sessionsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': authHeader,
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .post(
+            Uri.parse(_sessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        
+
         if (responseData['success'] == true) {
           final data = responseData['data'] ?? {};
           return SessionResponse(
@@ -231,6 +272,110 @@ class ApiService {
     }
   }
 
+  // List all company sessions (for chat overview)
+  static Future<SessionListResponse> listCompanySessions({
+    required String phoneNumber,
+    required String name,
+    required String companyName,
+  }) async {
+    try {
+      final authBytes = utf8.encode(_sessionAuth);
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+
+      final response = await http
+          .post(
+            Uri.parse(_sessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: jsonEncode({
+              'method': 'companylist',
+              'phoneNumber': phoneNumber,
+              'name': name,
+              'companyName': companyName,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        // Handle direct array response from server
+        if (responseData is List) {
+          final List<dynamic> sessionsData = responseData;
+          final sessions =
+              sessionsData
+                  .map(
+                    (sessionJson) => SessionData(
+                      sessionId: sessionJson['session_id'] ?? '',
+                      title: sessionJson['session_title'] ?? 'Untitled Session',
+                      description: sessionJson['session_description'] ?? '',
+                      thumbnail: sessionJson['session_thumbnail'],
+                      lastActivity:
+                          sessionJson['last_modified'] ??
+                          sessionJson['created_at'],
+                      messageCount: 0,
+                      createdAt: sessionJson['created_at'],
+                      chatType:
+                          sessionJson['chat_type'] ?? sessionJson['chatType'],
+                      emailSent:
+                          sessionJson['email_sent'] ??
+                          sessionJson['emailSent'] ??
+                          false,
+                      userId: sessionJson['user_id'],
+                      companyName: sessionJson['company_name'],
+                      userName: sessionJson['user_name'],
+                      messages:
+                          sessionJson['messages'] is String
+                              ? sessionJson['messages']
+                              : (sessionJson['messages'] != null
+                                  ? jsonEncode(sessionJson['messages'])
+                                  : null),
+                      phoneNumber: sessionJson['phone_number'],
+                      isPinned:
+                          sessionJson['is_pinned'] ??
+                          sessionJson['isPinned'] ??
+                          false,
+                    ),
+                  )
+                  .toList();
+
+          // Sort sessions by lastActivity (most recent first)
+          _sortSessionsByDate(sessions);
+
+          return SessionListResponse(
+            success: true,
+            message: 'Company sessions retrieved successfully',
+            sessions: sessions,
+          );
+        } else {
+          return SessionListResponse(
+            success: false,
+            message:
+                responseData is Map
+                    ? (responseData['message'] ?? 'Failed to retrieve sessions')
+                    : 'Invalid response format',
+            sessions: [],
+          );
+        }
+      } else {
+        return SessionListResponse(
+          success: false,
+          message: 'Failed to retrieve sessions: ${response.statusCode}',
+          sessions: [],
+        );
+      }
+    } catch (e) {
+      return SessionListResponse(
+        success: false,
+        message: 'Network error retrieving sessions: $e',
+        sessions: [],
+      );
+    }
+  }
+
   // List user sessions
   static Future<SessionListResponse> listSessions({
     required String phoneNumber,
@@ -240,43 +385,71 @@ class ApiService {
     try {
       final authBytes = utf8.encode(_sessionAuth);
       final authHeader = 'Basic ${base64Encode(authBytes)}';
-      
-      final response = await http.post(
-        Uri.parse(_sessionsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': authHeader,
-        },
-        body: jsonEncode({
-          'method': 'list',
-          'phoneNumber': phoneNumber,
-          'name': name,
-          'companyName': companyName,
-        }),
-      ).timeout(const Duration(seconds: 30));
+
+      final response = await http
+          .post(
+            Uri.parse(_sessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: jsonEncode({
+              'method': 'list',
+              'phoneNumber': phoneNumber,
+              'name': name,
+              'companyName': companyName,
+              'scope': 'company',
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        
+
         // Handle direct array response from server
         if (responseData is List) {
           final List<dynamic> sessionsData = responseData;
-          final sessions = sessionsData.map((sessionJson) => SessionData(
-            sessionId: sessionJson['session_id'] ?? '',
-            title: sessionJson['session_title'] ?? 'Untitled Session',
-            description: sessionJson['session_description'] ?? '',
-            thumbnail: sessionJson['session_thumbnail'],
-            lastActivity: sessionJson['last_modified'] ?? sessionJson['created_at'],
-            messageCount: 0, // Not provided by server
-            createdAt: sessionJson['created_at'],
-            chatType: sessionJson['chat_type'] ?? sessionJson['chatType'],
-            emailSent: sessionJson['email_sent'] ?? sessionJson['emailSent'] ?? false,
-          )).toList();
-          
+          final sessions =
+              sessionsData
+                  .map(
+                    (sessionJson) => SessionData(
+                      sessionId: sessionJson['session_id'] ?? '',
+                      title: sessionJson['session_title'] ?? 'Untitled Session',
+                      description: sessionJson['session_description'] ?? '',
+                      thumbnail: sessionJson['session_thumbnail'],
+                      lastActivity:
+                          sessionJson['last_modified'] ??
+                          sessionJson['created_at'],
+                      messageCount: 0, // Not provided by server
+                      createdAt: sessionJson['created_at'],
+                      chatType:
+                          sessionJson['chat_type'] ?? sessionJson['chatType'],
+                      emailSent:
+                          sessionJson['email_sent'] ??
+                          sessionJson['emailSent'] ??
+                          false,
+                      userId: sessionJson['user_id'],
+                      companyName: sessionJson['company_name'],
+                      userName: sessionJson['user_name'],
+                      messages:
+                          sessionJson['messages'] is String
+                              ? sessionJson['messages']
+                              : (sessionJson['messages'] != null
+                                  ? jsonEncode(sessionJson['messages'])
+                                  : null),
+                      phoneNumber: sessionJson['phone_number'],
+                      isPinned:
+                          sessionJson['is_pinned'] ??
+                          sessionJson['isPinned'] ??
+                          false,
+                    ),
+                  )
+                  .toList();
+
           // Sort sessions by lastActivity (most recent first)
           _sortSessionsByDate(sessions);
-          
+
           return SessionListResponse(
             success: true,
             message: 'Sessions retrieved successfully',
@@ -286,21 +459,64 @@ class ApiService {
         // Handle wrapped response format (fallback)
         else if (responseData is Map && responseData['success'] == true) {
           final List<dynamic> sessionsData = responseData['data'] ?? [];
-          final sessions = sessionsData.map((sessionJson) => SessionData(
-            sessionId: sessionJson['session_id'] ?? sessionJson['sessionId'] ?? '',
-            title: sessionJson['session_title'] ?? sessionJson['title'] ?? 'Untitled Session',
-            description: sessionJson['session_description'] ?? sessionJson['description'] ?? '',
-            thumbnail: sessionJson['session_thumbnail'] ?? sessionJson['thumbnail'],
-            lastActivity: sessionJson['last_modified'] ?? sessionJson['lastActivity'] ?? sessionJson['created_at'],
-            messageCount: sessionJson['messageCount'] ?? 0,
-            createdAt: sessionJson['created_at'] ?? sessionJson['createdAt'],
-            chatType: sessionJson['chat_type'] ?? sessionJson['chatType'],
-            emailSent: sessionJson['email_sent'] ?? sessionJson['emailSent'] ?? false,
-          )).toList();
-          
+          final sessions =
+              sessionsData
+                  .map(
+                    (sessionJson) => SessionData(
+                      sessionId:
+                          sessionJson['session_id'] ??
+                          sessionJson['sessionId'] ??
+                          '',
+                      title:
+                          sessionJson['session_title'] ??
+                          sessionJson['title'] ??
+                          'Untitled Session',
+                      description:
+                          sessionJson['session_description'] ??
+                          sessionJson['description'] ??
+                          '',
+                      thumbnail:
+                          sessionJson['session_thumbnail'] ??
+                          sessionJson['thumbnail'],
+                      lastActivity:
+                          sessionJson['last_modified'] ??
+                          sessionJson['lastActivity'] ??
+                          sessionJson['created_at'],
+                      messageCount: sessionJson['messageCount'] ?? 0,
+                      createdAt:
+                          sessionJson['created_at'] ?? sessionJson['createdAt'],
+                      chatType:
+                          sessionJson['chat_type'] ?? sessionJson['chatType'],
+                      emailSent:
+                          sessionJson['email_sent'] ??
+                          sessionJson['emailSent'] ??
+                          false,
+                      userId: sessionJson['user_id'] ?? sessionJson['userId'],
+                      companyName:
+                          sessionJson['company_name'] ??
+                          sessionJson['companyName'],
+                      userName:
+                          sessionJson['user_name'] ?? sessionJson['userName'],
+                      messages:
+                          sessionJson['messages'] is String
+                              ? sessionJson['messages']
+                              : (sessionJson['messages'] != null
+                                  ? jsonEncode(sessionJson['messages'])
+                                  : null),
+                      phoneNumber:
+                          sessionJson['phone_number'] ??
+                          sessionJson['phoneNumber'],
+                      isPinned:
+                          sessionJson['is_pinned'] ??
+                          sessionJson['isPinned'] ??
+                          false,
+                    ),
+                  )
+                  .toList();
+
           // Sort sessions by lastActivity (most recent first)
           _sortSessionsByDate(sessions);
-          
+
           return SessionListResponse(
             success: true,
             message: 'Sessions retrieved successfully',
@@ -309,7 +525,10 @@ class ApiService {
         } else {
           return SessionListResponse(
             success: false,
-            message: responseData is Map ? (responseData['message'] ?? 'Failed to retrieve sessions') : 'Invalid response format',
+            message:
+                responseData is Map
+                    ? (responseData['message'] ?? 'Failed to retrieve sessions')
+                    : 'Invalid response format',
             sessions: [],
           );
         }
@@ -338,6 +557,7 @@ class ApiService {
     String? title,
     String? description,
     bool? emailSent,
+    bool? isOwner,
     List<Map<String, dynamic>>? messages,
   }) async {
     try {
@@ -355,36 +575,48 @@ class ApiService {
       if (title != null) requestBody['title'] = title;
       if (description != null) requestBody['description'] = description;
       if (emailSent != null) requestBody['emailSent'] = emailSent;
+      if (isOwner != null) requestBody['isOwner'] = isOwner;
       if (messages != null) requestBody['messages'] = messages;
-      
-      final response = await http.post(
-        Uri.parse(_sessionsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': authHeader,
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 30));
+
+      final response = await http
+          .post(
+            Uri.parse(_sessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
 
         // Handle direct session data response from server
-        if (responseData is Map && (responseData.containsKey('session_id') || responseData.containsKey('session_title'))) {
+        if (responseData is Map &&
+            (responseData.containsKey('session_id') ||
+                responseData.containsKey('session_title'))) {
           return SessionResponse(
             success: true,
             message: 'Session updated successfully',
             sessionData: SessionData(
               sessionId: responseData['session_id'] ?? sessionId,
-              title: responseData['session_title'] ?? title ?? 'Updated Session',
-              description: responseData['session_description'] ?? description ?? '',
+              title:
+                  responseData['session_title'] ?? title ?? 'Updated Session',
+              description:
+                  responseData['session_description'] ?? description ?? '',
               thumbnail: responseData['session_thumbnail'],
-              lastActivity: responseData['last_modified'] ?? responseData['created_at'],
+              lastActivity:
+                  responseData['last_modified'] ?? responseData['created_at'],
               messageCount: 0,
               createdAt: responseData['created_at'],
               chatType: responseData['chat_type'],
-              emailSent: responseData['email_sent'] ?? responseData['emailSent'] ?? emailSent ?? false,
+              emailSent:
+                  responseData['email_sent'] ??
+                  responseData['emailSent'] ??
+                  emailSent ??
+                  false,
             ),
           );
         }
@@ -396,14 +628,26 @@ class ApiService {
             message: responseData['message'] ?? 'Session updated successfully',
             sessionData: SessionData(
               sessionId: data['session_id'] ?? data['sessionId'] ?? sessionId,
-              title: data['session_title'] ?? data['title'] ?? title ?? 'Updated Session',
-              description: data['session_description'] ?? data['description'] ?? description ?? '',
+              title:
+                  data['session_title'] ??
+                  data['title'] ??
+                  title ??
+                  'Updated Session',
+              description:
+                  data['session_description'] ??
+                  data['description'] ??
+                  description ??
+                  '',
               thumbnail: data['session_thumbnail'] ?? data['thumbnail'],
-              lastActivity: data['last_modified'] ?? data['lastActivity'] ?? data['created_at'],
+              lastActivity:
+                  data['last_modified'] ??
+                  data['lastActivity'] ??
+                  data['created_at'],
               messageCount: data['messageCount'] ?? 0,
               createdAt: data['created_at'] ?? data['createdAt'],
               chatType: data['chat_type'] ?? data['chatType'],
-              emailSent: data['email_sent'] ?? data['emailSent'] ?? emailSent ?? false,
+              emailSent:
+                  data['email_sent'] ?? data['emailSent'] ?? emailSent ?? false,
             ),
           );
         } else {
@@ -436,26 +680,28 @@ class ApiService {
     try {
       final authBytes = utf8.encode(_sessionAuth);
       final authHeader = 'Basic ${base64Encode(authBytes)}';
-      
-      final response = await http.post(
-        Uri.parse(_sessionsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': authHeader,
-        },
-        body: jsonEncode({
-          'method': 'delete',
-          'sessionId': sessionId,
-          'phoneNumber': phoneNumber,
-          'name': name,
-          'companyName': companyName,
-        }),
-      ).timeout(const Duration(seconds: 30));
+
+      final response = await http
+          .post(
+            Uri.parse(_sessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: jsonEncode({
+              'method': 'delete',
+              'sessionId': sessionId,
+              'phoneNumber': phoneNumber,
+              'name': name,
+              'companyName': companyName,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        
+
         return ApiResponse(
           success: responseData['success'] ?? true,
           message: responseData['message'] ?? 'Session deleted successfully',
@@ -474,6 +720,108 @@ class ApiService {
     }
   }
 
+  // Pin session
+  static Future<ApiResponse> pinSession({
+    required String sessionId,
+    required String phoneNumber,
+    required String name,
+    required String companyName,
+  }) async {
+    try {
+      final authBytes = utf8.encode(_sessionAuth);
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+
+      final response = await http
+          .post(
+            Uri.parse(_sessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: jsonEncode({
+              'method': 'setpin',
+              'sessionId': sessionId,
+              'phoneNumber': phoneNumber,
+              'name': name,
+              'companyName': companyName,
+              'scope': 'company',
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        return ApiResponse(
+          success: responseData['success'] ?? true,
+          message: responseData['message'] ?? 'Session pinned successfully',
+        );
+      } else {
+        return ApiResponse(
+          success: false,
+          message: 'Failed to pin session: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      return ApiResponse(
+        success: false,
+        message: 'Network error pinning session: $e',
+      );
+    }
+  }
+
+  // Unpin session
+  static Future<ApiResponse> unpinSession({
+    required String sessionId,
+    required String phoneNumber,
+    required String name,
+    required String companyName,
+  }) async {
+    try {
+      final authBytes = utf8.encode(_sessionAuth);
+      final authHeader = 'Basic ${base64Encode(authBytes)}';
+
+      final response = await http
+          .post(
+            Uri.parse(_sessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: jsonEncode({
+              'method': 'removepin',
+              'sessionId': sessionId,
+              'phoneNumber': phoneNumber,
+              'name': name,
+              'companyName': companyName,
+              'scope': 'company',
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        return ApiResponse(
+          success: responseData['success'] ?? true,
+          message: responseData['message'] ?? 'Session unpinned successfully',
+        );
+      } else {
+        return ApiResponse(
+          success: false,
+          message: 'Failed to unpin session: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      return ApiResponse(
+        success: false,
+        message: 'Network error unpinning session: $e',
+      );
+    }
+  }
+
   // Get session details
   static Future<SessionResponse> getSessionDetails({
     required String sessionId,
@@ -484,28 +832,32 @@ class ApiService {
     try {
       final authBytes = utf8.encode(_sessionAuth);
       final authHeader = 'Basic ${base64Encode(authBytes)}';
-      
-      final response = await http.post(
-        Uri.parse(_sessionsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': authHeader,
-        },
-        body: jsonEncode({
-          'method': 'get',
-          'sessionId': sessionId,
-          'phoneNumber': phoneNumber,
-          'name': name,
-          'companyName': companyName,
-        }),
-      ).timeout(const Duration(seconds: 30));
+
+      final response = await http
+          .post(
+            Uri.parse(_sessionsUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: jsonEncode({
+              'method': 'get',
+              'sessionId': sessionId,
+              'phoneNumber': phoneNumber,
+              'name': name,
+              'companyName': companyName,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
 
         // Handle direct session data response from server
-        if (responseData is Map && (responseData.containsKey('session_id') || responseData.containsKey('session_title'))) {
+        if (responseData is Map &&
+            (responseData.containsKey('session_id') ||
+                responseData.containsKey('session_title'))) {
           return SessionResponse(
             success: true,
             message: 'Session details retrieved successfully',
@@ -514,7 +866,8 @@ class ApiService {
               title: responseData['session_title'] ?? 'Session',
               description: responseData['session_description'] ?? '',
               thumbnail: responseData['session_thumbnail'],
-              lastActivity: responseData['last_modified'] ?? responseData['created_at'],
+              lastActivity:
+                  responseData['last_modified'] ?? responseData['created_at'],
               messageCount: 0, // Not provided by server
               createdAt: responseData['created_at'],
               chatType: responseData['chat_type'],
@@ -530,9 +883,13 @@ class ApiService {
             sessionData: SessionData(
               sessionId: data['session_id'] ?? data['sessionId'] ?? sessionId,
               title: data['session_title'] ?? data['title'] ?? 'Session',
-              description: data['session_description'] ?? data['description'] ?? '',
+              description:
+                  data['session_description'] ?? data['description'] ?? '',
               thumbnail: data['session_thumbnail'] ?? data['thumbnail'],
-              lastActivity: data['last_modified'] ?? data['lastActivity'] ?? data['created_at'],
+              lastActivity:
+                  data['last_modified'] ??
+                  data['lastActivity'] ??
+                  data['created_at'],
               messageCount: data['messageCount'] ?? 0,
               createdAt: data['created_at'] ?? data['createdAt'],
               chatType: data['chat_type'] ?? data['chatType'],
@@ -559,28 +916,30 @@ class ApiService {
   }
 
   // Check app version and user status
-  static Future<VersionCheckResponse> checkVersion(String version, String phoneNumber) async {
+  static Future<VersionCheckResponse> checkVersion(
+    String version,
+    String phoneNumber,
+  ) async {
     try {
-      final response = await http.post(
-        Uri.parse(_versionCheckUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-        },
-        body: jsonEncode({
-          'version': version,
-          'phoneNumber': phoneNumber,
-        }),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .post(
+            Uri.parse(_versionCheckUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': _getBasicAuthHeader(),
+            },
+            body: jsonEncode({'version': version, 'phoneNumber': phoneNumber}),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        
+
         // Handle array response format
         if (responseData is List && responseData.isNotEmpty) {
           final data = responseData[0];
-          
+
           return VersionCheckResponse(
             success: true,
             reset: data['Reset'] ?? false,
@@ -606,11 +965,7 @@ class ApiResponse {
   final String message;
   final Map<String, dynamic>? data;
 
-  ApiResponse({
-    required this.success,
-    required this.message,
-    this.data,
-  });
+  ApiResponse({required this.success, required this.message, this.data});
 }
 
 // Version check response class
@@ -639,6 +994,13 @@ class SessionData {
   final String? createdAt;
   final String? chatType;
   final bool emailSent;
+  final String? userId;
+  final String? companyName;
+  final String? userName;
+  final String? messages;
+  final String? phoneNumber;
+  final bool isOwner;
+  final bool isPinned;
 
   SessionData({
     required this.sessionId,
@@ -650,6 +1012,13 @@ class SessionData {
     this.createdAt,
     this.chatType,
     this.emailSent = false,
+    this.userId,
+    this.companyName,
+    this.userName,
+    this.messages,
+    this.phoneNumber,
+    this.isOwner = false,
+    this.isPinned = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -663,6 +1032,13 @@ class SessionData {
       'createdAt': createdAt,
       'chatType': chatType,
       'emailSent': emailSent,
+      'userId': userId,
+      'companyName': companyName,
+      'userName': userName,
+      'messages': messages,
+      'phoneNumber': phoneNumber,
+      'isOwner': isOwner,
+      'isPinned': isPinned,
     };
   }
 
@@ -677,7 +1053,64 @@ class SessionData {
       createdAt: json['createdAt'],
       chatType: json['chatType'],
       emailSent: json['emailSent'] ?? false,
+      userId: json['userId'],
+      companyName: json['companyName'],
+      userName: json['userName'],
+      messages: json['messages'],
+      phoneNumber: json['phoneNumber'],
+      isOwner: json['isOwner'] ?? false,
+      isPinned: json['isPinned'] ?? false,
     );
+  }
+
+  // Helper method to get message count from messages JSON
+  int getMessageCount() {
+    if (messages == null || messages!.isEmpty) return 0;
+
+    try {
+      final messagesData = jsonDecode(messages!);
+      if (messagesData is List) {
+        return messagesData.length;
+      }
+    } catch (e) {
+      return 0;
+    }
+    return 0;
+  }
+
+  // Helper method to get last message preview text
+  String? getLastMessagePreview() {
+    if (messages == null || messages!.isEmpty) return null;
+
+    try {
+      final messagesData = jsonDecode(messages!);
+      if (messagesData is List && messagesData.isNotEmpty) {
+        final lastMessage = messagesData.last;
+        return lastMessage['text'] ?? lastMessage['message'];
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
+  }
+
+  // Helper method to get last message timestamp
+  DateTime? getLastMessageTimestamp() {
+    if (messages == null || messages!.isEmpty) return null;
+
+    try {
+      final messagesData = jsonDecode(messages!);
+      if (messagesData is List && messagesData.isNotEmpty) {
+        final lastMessage = messagesData.last;
+        final timestamp = lastMessage['timestamp'] ?? lastMessage['created_at'];
+        if (timestamp != null) {
+          return DateTime.tryParse(timestamp.toString());
+        }
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
   }
 }
 
@@ -707,17 +1140,22 @@ class SessionListResponse {
   });
 }
 
-// Helper method to sort sessions by date (most recent first)
+// Helper method to sort sessions by pin status and date (pinned first, then most recent first)
 void _sortSessionsByDate(List<SessionData> sessions) {
   sessions.sort((a, b) {
+    // First, sort by pin status (pinned sessions first)
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+
+    // Then sort by date within each group
     final aDate = DateTime.tryParse(a.lastActivity ?? a.createdAt ?? '');
     final bDate = DateTime.tryParse(b.lastActivity ?? b.createdAt ?? '');
-    
+
     // Handle null dates
     if (aDate == null && bDate == null) return 0;
     if (aDate == null) return 1; // Put null dates at the end
     if (bDate == null) return -1; // Put null dates at the end
-    
+
     // Sort in descending order (newest first)
     return bDate.compareTo(aDate);
   });

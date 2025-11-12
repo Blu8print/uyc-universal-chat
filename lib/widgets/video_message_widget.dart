@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 
 class VideoMessageWidget extends StatelessWidget {
-  final File? thumbnailFile;  // Local temp thumbnail during upload
-  final String? thumbnailUrl;  // Nextcloud thumbnail URL after upload
+  final File? thumbnailFile; // Local temp thumbnail during upload
+  final String? thumbnailUrl; // Nextcloud thumbnail URL after upload
   final bool isCustomer;
-  final bool isUploading;  // Show spinner overlay
-  final String? title;  // Filename/title to display on thumbnail
-  final VoidCallback? onTap;  // Play video callback
-  final VoidCallback? onLongPress;  // Delete callback
+  final bool isUploading; // Show spinner overlay
+  final String? title; // Filename/title to display on thumbnail
+  final VoidCallback? onTap; // Play video callback
+  final VoidCallback? onLongPress; // Delete callback
 
   const VideoMessageWidget({
     super.key,
@@ -27,10 +27,7 @@ class VideoMessageWidget extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        constraints: const BoxConstraints(
-          maxWidth: 250,
-          maxHeight: 300,
-        ),
+        constraints: const BoxConstraints(maxWidth: 250, maxHeight: 300),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -106,7 +103,10 @@ class VideoMessageWidget extends StatelessWidget {
                   left: 0,
                   right: 0,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
@@ -144,18 +144,11 @@ class VideoMessageWidget extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.videocam,
-            size: 48,
-            color: Colors.grey.shade400,
-          ),
+          Icon(Icons.videocam, size: 48, color: Colors.grey.shade400),
           const SizedBox(height: 8),
           Text(
             'Video kan niet laden',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
           ),
         ],
       ),

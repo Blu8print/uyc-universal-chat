@@ -13,6 +13,7 @@ import '../services/firebase_messaging_service.dart';
 import '../services/api_service.dart';
 import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
+import 'image_viewer_screen.dart';
 import '../widgets/document_message_widget.dart';
 import '../widgets/video_message_widget.dart';
 import 'package:image_picker/image_picker.dart';
@@ -226,16 +227,133 @@ class _ChatScreenState extends State<ChatScreen> {
         }
 
         setState(() {
-          _messages.addAll(messages);  // ListView reverse: true handles the display order
+          _messages.addAll(
+            messages,
+          ); // ListView reverse: true handles the display order
         });
         _scrollToBottom();
 
         return;
       }
+
+      // No local messages - try to load from SessionData (API)
+      final sessionData = SessionService.currentSessionData;
+      if (sessionData != null &&
+          sessionData.messages != null &&
+          sessionData.messages!.isNotEmpty) {
+        debugPrint('DEBUG: Loading messages from SessionData API...');
+
+        final messages = _parseMessagesFromSessionData(sessionData);
+
+        if (messages.isNotEmpty) {
+          debugPrint('DEBUG: Loaded ${messages.length} messages from API');
+
+          // Load chatType from SessionData
+          if (sessionData.chatType != null) {
+            _chatType = sessionData.chatType;
+            debugPrint('DEBUG: Loaded chatType from SessionData: $_chatType');
+          }
+
+          // Save to local storage for next time
+          final messagesJson = messages.map((msg) => msg.toJson()).toList();
+          await StorageService.saveMessages(sessionId, messagesJson);
+
+          setState(() {
+            _messages.addAll(messages);
+          });
+          _scrollToBottom();
+
+          return;
+        }
+      }
     }
 
     // No existing messages - no welcome message needed
     // The action context will handle sending the initial message
+  }
+
+  // Parse messages from SessionData API response
+  List<ChatMessage> _parseMessagesFromSessionData(SessionData sessionData) {
+    final List<ChatMessage> parsedMessages = [];
+
+    if (sessionData.messages == null || sessionData.messages!.isEmpty) {
+      return parsedMessages;
+    }
+
+    try {
+      final messagesData = jsonDecode(sessionData.messages!);
+
+      // Check if messages are nested under "messages" key
+      final messagesList =
+          messagesData is Map && messagesData.containsKey('messages')
+              ? messagesData['messages']
+              : messagesData;
+
+      if (messagesList is List) {
+        for (var msgJson in messagesList) {
+          try {
+            // Parse attachmentType
+            AttachmentType attachmentType = AttachmentType.none;
+            if (msgJson['attachmentType'] != null) {
+              final attachmentTypeStr = msgJson['attachmentType'].toString();
+              if (attachmentTypeStr.contains('audio')) {
+                attachmentType = AttachmentType.audio;
+              } else if (attachmentTypeStr.contains('image')) {
+                attachmentType = AttachmentType.image;
+              } else if (attachmentTypeStr.contains('document')) {
+                attachmentType = AttachmentType.document;
+              } else if (attachmentTypeStr.contains('video')) {
+                attachmentType = AttachmentType.video;
+              }
+            }
+
+            // Parse mediaMetadata if present
+            MediaMetadata? mediaMetadata;
+            if (msgJson['mediaMetadata'] != null) {
+              final metaJson = msgJson['mediaMetadata'];
+              mediaMetadata = MediaMetadata(
+                id: metaJson['id'] ?? '',
+                filename: metaJson['filename'] ?? '',
+                seoTitle: metaJson['seo_title'] ?? metaJson['filename'] ?? '',
+                createdAt:
+                    metaJson['created_at'] != null
+                        ? DateTime.parse(metaJson['created_at'])
+                        : DateTime.now(),
+                sessionId: metaJson['session_id'] ?? sessionData.sessionId,
+                description: metaJson['description'],
+                storageUrl: metaJson['storage_url'] ?? '',
+              );
+            }
+
+            // Parse timestamp
+            DateTime timestamp = DateTime.now();
+            if (msgJson['timestamp'] != null) {
+              timestamp = DateTime.parse(msgJson['timestamp']);
+            }
+
+            // Create ChatMessage
+            final message = ChatMessage(
+              text: msgJson['text'] ?? '',
+              isCustomer: msgJson['isCustomer'] ?? false,
+              timestamp: timestamp,
+              attachmentType: attachmentType,
+              status: MessageStatus.sent,
+              fromFCM: false,
+              autoPlay: false,
+              mediaMetadata: mediaMetadata,
+            );
+
+            parsedMessages.add(message);
+          } catch (e) {
+            debugPrint('Error parsing individual message: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error parsing messages from SessionData: $e');
+    }
+
+    return parsedMessages;
   }
 
   // Check if message files still exist
@@ -257,10 +375,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Map<String, dynamic> _detectAndStripBannerTag(String text) {
     final hasBannerTag = text.contains('{show_banner}');
     final cleanText = text.replaceAll('{show_banner}', '').trim();
-    return {
-      'text': cleanText,
-      'shouldShowBanner': hasBannerTag,
-    };
+    return {'text': cleanText, 'shouldShowBanner': hasBannerTag};
   }
 
   // Convert ChatMessage to server-friendly format for webhook
@@ -268,13 +383,16 @@ class _ChatScreenState extends State<ChatScreen> {
   // Excludes: local file paths, status, fromFCM (not needed for server restoration)
   List<Map<String, dynamic>> _convertMessagesToServerFormat() {
     return _messages
-        .map((msg) => {
-          'text': msg.text,
-          'isCustomer': msg.isCustomer,
-          'timestamp': msg.timestamp.toIso8601String(),
-          'attachmentType': msg.attachmentType.toString(),
-          if (msg.mediaMetadata != null) 'mediaMetadata': msg.mediaMetadata!.toJson(),
-        })
+        .map(
+          (msg) => {
+            'text': msg.text,
+            'isCustomer': msg.isCustomer,
+            'timestamp': msg.timestamp.toIso8601String(),
+            'attachmentType': msg.attachmentType.toString(),
+            if (msg.mediaMetadata != null)
+              'mediaMetadata': msg.mediaMetadata!.toJson(),
+          },
+        )
         .toList();
   }
 
@@ -296,7 +414,7 @@ class _ChatScreenState extends State<ChatScreen> {
   // Add message and save to storage
   Future<void> _addMessage(ChatMessage message) async {
     setState(() {
-      _messages.insert(0,message);
+      _messages.insert(0, message);
     });
     await _saveMessages();
   }
@@ -357,7 +475,7 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          0,  // With reverse: true, position 0 = bottom (newest messages)
+          0, // With reverse: true, position 0 = bottom (newest messages)
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -396,7 +514,6 @@ class _ChatScreenState extends State<ChatScreen> {
       await _sendBulkMessages(newMessage);
     }
   }
-
 
   Future<void> _addErrorMessage(String errorText) async {
     await _addMessage(
@@ -466,7 +583,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
         debugPrint('Audio message added with autoPlay: true');
       } else {
-        debugPrint('Audio generation failed with status: ${response.statusCode}');
+        debugPrint(
+          'Audio generation failed with status: ${response.statusCode}',
+        );
       }
     } catch (e, stackTrace) {
       debugPrint('Error generating audio: $e');
@@ -624,17 +743,20 @@ class _ChatScreenState extends State<ChatScreen> {
       if (data is List && data.isNotEmpty) {
         debugPrint('DEBUG: Found ${data.length} items in array');
         final metadata = MediaMetadata.fromJson(data[0]);
-        debugPrint('DEBUG: Parsed metadata - storage_url: ${metadata.storageUrl}');
+        debugPrint(
+          'DEBUG: Parsed metadata - storage_url: ${metadata.storageUrl}',
+        );
         return metadata;
       }
       // Handle single object format
       else if (data is Map<String, dynamic>) {
         debugPrint('DEBUG: Response is a single object (Map)');
         final metadata = MediaMetadata.fromJson(data);
-        debugPrint('DEBUG: Parsed metadata - storage_url: ${metadata.storageUrl}');
+        debugPrint(
+          'DEBUG: Parsed metadata - storage_url: ${metadata.storageUrl}',
+        );
         return metadata;
-      }
-      else {
+      } else {
         debugPrint('DEBUG: Data is neither a List nor a Map');
       }
     } catch (e) {
@@ -942,7 +1064,8 @@ class _ChatScreenState extends State<ChatScreen> {
       // Add progress message
       if (imageFiles.length > 1) {
         setState(() {
-          _messages.insert(0,
+          _messages.insert(
+            0,
             ChatMessage(
               text:
                   'Afbeelding ${i + 1} van ${imageFiles.length} wordt verzonden...',
@@ -976,7 +1099,8 @@ class _ChatScreenState extends State<ChatScreen> {
       text: '📷 Afbeelding',
       isCustomer: true,
       timestamp: DateTime.now(),
-      imageFile: imageFile,  // Temp file - will be replaced with URL after upload
+      imageFile:
+          imageFile, // Temp file - will be replaced with URL after upload
       attachmentType: AttachmentType.image,
       status: MessageStatus.uploading, // Show as uploading with spinner
     );
@@ -989,23 +1113,26 @@ class _ChatScreenState extends State<ChatScreen> {
     _uploadImageInBackground(newMessage, imageFile);
   }
 
-  Future<void> _uploadImageInBackground(ChatMessage message, File imageFile) async {
+  Future<void> _uploadImageInBackground(
+    ChatMessage message,
+    File imageFile,
+  ) async {
     try {
       final user = await StorageService.getUser();
       if (user == null) return;
 
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse(_n8nImageUrl),
-      );
+      final request = http.MultipartRequest('POST', Uri.parse(_n8nImageUrl));
 
       request.headers.addAll({
         'Authorization': _getBasicAuthHeader(),
         'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
       });
 
-      request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
-      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.files.add(
+        await http.MultipartFile.fromPath('image', imageFile.path),
+      );
+      request.fields['sessionId'] =
+          SessionService.currentSessionId ?? 'no-session';
       request.fields['phoneNumber'] = user.phoneNumber;
       request.fields['name'] = user.name;
       request.fields['companyName'] = user.companyName;
@@ -1014,7 +1141,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
-        debugPrint('DEBUG: Image upload successful, status: ${response.statusCode}');
+        debugPrint(
+          'DEBUG: Image upload successful, status: ${response.statusCode}',
+        );
         debugPrint('DEBUG: Response body: ${response.body}');
 
         // Parse Nextcloud metadata from webhook response
@@ -1023,13 +1152,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
         if (metadata != null) {
           debugPrint('DEBUG: Updating message with metadata...');
-          debugPrint('DEBUG: Looking for message with timestamp: ${message.timestamp}');
+          debugPrint(
+            'DEBUG: Looking for message with timestamp: ${message.timestamp}',
+          );
 
           // Update message: replace temp file with Nextcloud metadata
           setState(() {
-            final index = _messages.indexWhere((m) =>
-                m.timestamp == message.timestamp &&
-                m.attachmentType == AttachmentType.image);
+            final index = _messages.indexWhere(
+              (m) =>
+                  m.timestamp == message.timestamp &&
+                  m.attachmentType == AttachmentType.image,
+            );
             debugPrint('DEBUG: Found message at index: $index');
 
             if (index != -1) {
@@ -1037,12 +1170,14 @@ class _ChatScreenState extends State<ChatScreen> {
                 text: message.text,
                 isCustomer: message.isCustomer,
                 timestamp: message.timestamp,
-                imageFile: null,  // Remove temp file
+                imageFile: null, // Remove temp file
                 attachmentType: AttachmentType.image,
-                status: MessageStatus.sent,  // Mark as sent
-                mediaMetadata: metadata,  // Add Nextcloud data
+                status: MessageStatus.sent, // Mark as sent
+                mediaMetadata: metadata, // Add Nextcloud data
               );
-              debugPrint('DEBUG: Message updated with storage_url: ${metadata.storageUrl}');
+              debugPrint(
+                'DEBUG: Message updated with storage_url: ${metadata.storageUrl}',
+              );
             }
           });
 
@@ -1055,16 +1190,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
           // Description stored in metadata but not displayed as separate message
         } else {
-          debugPrint('DEBUG: Metadata was null - response not parsed correctly');
+          debugPrint(
+            'DEBUG: Metadata was null - response not parsed correctly',
+          );
         }
       } else {
         debugPrint('DEBUG: Upload failed with status: ${response.statusCode}');
         debugPrint('DEBUG: Response body: ${response.body}');
         // Mark upload as failed
         setState(() {
-          final index = _messages.indexWhere((m) =>
-              m.timestamp == message.timestamp &&
-              m.attachmentType == AttachmentType.image);
+          final index = _messages.indexWhere(
+            (m) =>
+                m.timestamp == message.timestamp &&
+                m.attachmentType == AttachmentType.image,
+          );
           if (index != -1) {
             _messages[index] = ChatMessage(
               text: message.text,
@@ -1081,9 +1220,11 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint('Error uploading image: $e');
       // Mark as failed
       setState(() {
-        final index = _messages.indexWhere((m) =>
-            m.timestamp == message.timestamp &&
-            m.attachmentType == AttachmentType.image);
+        final index = _messages.indexWhere(
+          (m) =>
+              m.timestamp == message.timestamp &&
+              m.attachmentType == AttachmentType.image,
+        );
         if (index != -1) {
           _messages[index] = ChatMessage(
             text: message.text,
@@ -1103,20 +1244,26 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Afbeelding verwijderen'),
-        content: const Text('Weet je zeker dat je deze afbeelding wilt verwijderen?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuleer'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Afbeelding verwijderen'),
+            content: const Text(
+              'Weet je zeker dat je deze afbeelding wilt verwijderen?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Annuleer'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Verwijder',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Verwijder', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
 
     if (confirmed == true) {
@@ -1144,9 +1291,10 @@ class _ChatScreenState extends State<ChatScreen> {
       if (response.statusCode == 200) {
         // Remove from chat and save
         setState(() {
-          _messages.removeWhere((m) =>
-            m.timestamp == message.timestamp &&
-            m.attachmentType == AttachmentType.image
+          _messages.removeWhere(
+            (m) =>
+                m.timestamp == message.timestamp &&
+                m.attachmentType == AttachmentType.image,
           );
         });
         await _saveMessages();
@@ -1189,17 +1337,44 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => VideoPlayerScreen(
-            videoUrl: '${message.mediaMetadata!.storageUrl}/download',
-            title: message.mediaMetadata!.filename,
-          ),
+          builder:
+              (context) => VideoPlayerScreen(
+                videoUrl: '${message.mediaMetadata!.storageUrl}/download',
+                title: message.mediaMetadata!.filename,
+              ),
         ),
       );
     } catch (e) {
       debugPrint('Error playing video: $e');
       if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error bij afspelen video: $e')));
+      }
+    }
+  }
+
+  Future<void> _viewImage(ChatMessage message) async {
+    // Get image URL from mediaMetadata
+    if (message.mediaMetadata == null) return;
+
+    final imageUrl = '${message.mediaMetadata!.storageUrl}/preview';
+
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (context) => ImageViewerScreen(
+                imageUrl: imageUrl,
+                title: message.mediaMetadata!.filename,
+              ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error viewing image: $e');
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error bij afspelen video: $e')),
+          SnackBar(content: Text('Error bij weergeven afbeelding: $e')),
         );
       }
     }
@@ -1210,20 +1385,26 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Document verwijderen'),
-        content: const Text('Weet je zeker dat je dit document wilt verwijderen?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuleer'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Document verwijderen'),
+            content: const Text(
+              'Weet je zeker dat je dit document wilt verwijderen?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Annuleer'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Verwijder',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Verwijder', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
 
     if (confirmed == true) {
@@ -1235,7 +1416,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (message.mediaMetadata == null) return;
 
     try {
-      debugPrint('DEBUG: Deleting document: ${message.mediaMetadata!.filename}');
+      debugPrint(
+        'DEBUG: Deleting document: ${message.mediaMetadata!.filename}',
+      );
 
       final response = await http.post(
         Uri.parse('https://automation.kwaaijongens.nl/webhook/delete_media'),
@@ -1250,9 +1433,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (response.statusCode == 200) {
         setState(() {
-          _messages.removeWhere((m) =>
-            m.timestamp == message.timestamp &&
-            m.attachmentType == AttachmentType.document
+          _messages.removeWhere(
+            (m) =>
+                m.timestamp == message.timestamp &&
+                m.attachmentType == AttachmentType.document,
           );
         });
         await _saveMessages();
@@ -1268,20 +1452,26 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Video verwijderen'),
-        content: const Text('Weet je zeker dat je deze video wilt verwijderen?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuleer'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Video verwijderen'),
+            content: const Text(
+              'Weet je zeker dat je deze video wilt verwijderen?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Annuleer'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Verwijder',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Verwijder', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
 
     if (confirmed == true) {
@@ -1308,9 +1498,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (response.statusCode == 200) {
         setState(() {
-          _messages.removeWhere((m) =>
-            m.timestamp == message.timestamp &&
-            m.attachmentType == AttachmentType.video
+          _messages.removeWhere(
+            (m) =>
+                m.timestamp == message.timestamp &&
+                m.attachmentType == AttachmentType.video,
           );
         });
         await _saveMessages();
@@ -1352,7 +1543,7 @@ class _ChatScreenState extends State<ChatScreen> {
       status: MessageStatus.sent,
     );
     setState(() {
-      _messages.insert(0,compressingMessage);
+      _messages.insert(0, compressingMessage);
     });
     _scrollToBottom();
 
@@ -1440,8 +1631,8 @@ class _ChatScreenState extends State<ChatScreen> {
       text: '🎥 Video',
       isCustomer: true,
       timestamp: DateTime.now(),
-      videoFile: videoFile,  // Compressed file - will be replaced with URL
-      videoThumbnailFile: thumbnailFile,  // Temp thumbnail during upload
+      videoFile: videoFile, // Compressed file - will be replaced with URL
+      videoThumbnailFile: thumbnailFile, // Temp thumbnail during upload
       attachmentType: AttachmentType.video,
       status: MessageStatus.uploading, // Show as uploading with spinner
     );
@@ -1484,7 +1675,10 @@ class _ChatScreenState extends State<ChatScreen> {
     return null;
   }
 
-  Future<void> _uploadVideoInBackground(ChatMessage message, File videoFile) async {
+  Future<void> _uploadVideoInBackground(
+    ChatMessage message,
+    File videoFile,
+  ) async {
     try {
       final user = await StorageService.getUser();
       if (user == null) return;
@@ -1492,29 +1686,31 @@ class _ChatScreenState extends State<ChatScreen> {
       // Generate thumbnail before upload
       final thumbnailPath = await _generateVideoThumbnail(videoFile);
 
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse(_n8nVideoUrl),
-      );
+      final request = http.MultipartRequest('POST', Uri.parse(_n8nVideoUrl));
 
       request.headers.addAll({
         'Authorization': _getBasicAuthHeader(),
         'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
       });
 
-      request.files.add(await http.MultipartFile.fromPath('video', videoFile.path));
+      request.files.add(
+        await http.MultipartFile.fromPath('video', videoFile.path),
+      );
 
       // Add thumbnail file if generated successfully
       if (thumbnailPath != null) {
-        request.files.add(await http.MultipartFile.fromPath(
-          'thumbnail',
-          thumbnailPath,
-          filename: 'thumbnail.jpg',
-        ));
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'thumbnail',
+            thumbnailPath,
+            filename: 'thumbnail.jpg',
+          ),
+        );
         request.fields['hasThumbnail'] = 'true';
       }
 
-      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.fields['sessionId'] =
+          SessionService.currentSessionId ?? 'no-session';
       request.fields['phoneNumber'] = user.phoneNumber;
       request.fields['name'] = user.name;
       request.fields['companyName'] = user.companyName;
@@ -1523,7 +1719,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
-        debugPrint('DEBUG: Video upload successful, status: ${response.statusCode}');
+        debugPrint(
+          'DEBUG: Video upload successful, status: ${response.statusCode}',
+        );
         debugPrint('DEBUG: Response body: ${response.body}');
 
         // Parse Nextcloud metadata from webhook response
@@ -1535,9 +1733,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
           // Update message: replace temp file with Nextcloud metadata
           setState(() {
-            final index = _messages.indexWhere((m) =>
-                m.timestamp == message.timestamp &&
-                m.attachmentType == AttachmentType.video);
+            final index = _messages.indexWhere(
+              (m) =>
+                  m.timestamp == message.timestamp &&
+                  m.attachmentType == AttachmentType.video,
+            );
             debugPrint('DEBUG: Found message at index: $index');
 
             if (index != -1) {
@@ -1545,13 +1745,17 @@ class _ChatScreenState extends State<ChatScreen> {
                 text: message.text,
                 isCustomer: message.isCustomer,
                 timestamp: message.timestamp,
-                videoFile: null,  // Remove temp video file
-                videoThumbnailFile: null,  // Remove temp thumbnail file (will use mediaMetadata.thumbnailPreviewUrl)
+                videoFile: null, // Remove temp video file
+                videoThumbnailFile:
+                    null, // Remove temp thumbnail file (will use mediaMetadata.thumbnailPreviewUrl)
                 attachmentType: AttachmentType.video,
-                status: MessageStatus.sent,  // Mark as sent
-                mediaMetadata: metadata,  // Add Nextcloud data with thumbnail URL
+                status: MessageStatus.sent, // Mark as sent
+                mediaMetadata:
+                    metadata, // Add Nextcloud data with thumbnail URL
               );
-              debugPrint('DEBUG: Video updated with storage_url: ${metadata.storageUrl}');
+              debugPrint(
+                'DEBUG: Video updated with storage_url: ${metadata.storageUrl}',
+              );
             }
           });
 
@@ -1562,15 +1766,19 @@ class _ChatScreenState extends State<ChatScreen> {
           // Show "Team inlichten" banner after successful upload
           _displaySendToTeamBanner();
         } else {
-          debugPrint('DEBUG: Metadata was null - response not parsed correctly');
+          debugPrint(
+            'DEBUG: Metadata was null - response not parsed correctly',
+          );
         }
       } else {
         debugPrint('DEBUG: Upload failed with status: ${response.statusCode}');
         // Mark upload as failed
         setState(() {
-          final index = _messages.indexWhere((m) =>
-              m.timestamp == message.timestamp &&
-              m.attachmentType == AttachmentType.video);
+          final index = _messages.indexWhere(
+            (m) =>
+                m.timestamp == message.timestamp &&
+                m.attachmentType == AttachmentType.video,
+          );
           if (index != -1) {
             _messages[index] = ChatMessage(
               text: message.text,
@@ -1587,9 +1795,11 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint('Error uploading video: $e');
       // Mark as failed
       setState(() {
-        final index = _messages.indexWhere((m) =>
-            m.timestamp == message.timestamp &&
-            m.attachmentType == AttachmentType.video);
+        final index = _messages.indexWhere(
+          (m) =>
+              m.timestamp == message.timestamp &&
+              m.attachmentType == AttachmentType.video,
+        );
         if (index != -1) {
           _messages[index] = ChatMessage(
             text: message.text,
@@ -1650,7 +1860,7 @@ class _ChatScreenState extends State<ChatScreen> {
       text: '📄 ${fileInfo['fileName']}',
       isCustomer: true,
       timestamp: DateTime.now(),
-      documentFile: documentFile,  // Temp file - will be replaced with URL
+      documentFile: documentFile, // Temp file - will be replaced with URL
       attachmentType: AttachmentType.document,
       status: MessageStatus.uploading, // Show as uploading with spinner
     );
@@ -1663,23 +1873,26 @@ class _ChatScreenState extends State<ChatScreen> {
     _uploadDocumentInBackground(newMessage, documentFile);
   }
 
-  Future<void> _uploadDocumentInBackground(ChatMessage message, File documentFile) async {
+  Future<void> _uploadDocumentInBackground(
+    ChatMessage message,
+    File documentFile,
+  ) async {
     try {
       final user = await StorageService.getUser();
       if (user == null) return;
 
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse(_n8nDocumentUrl),
-      );
+      final request = http.MultipartRequest('POST', Uri.parse(_n8nDocumentUrl));
 
       request.headers.addAll({
         'Authorization': _getBasicAuthHeader(),
         'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
       });
 
-      request.files.add(await http.MultipartFile.fromPath('document', documentFile.path));
-      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.files.add(
+        await http.MultipartFile.fromPath('document', documentFile.path),
+      );
+      request.fields['sessionId'] =
+          SessionService.currentSessionId ?? 'no-session';
       request.fields['phoneNumber'] = user.phoneNumber;
       request.fields['name'] = user.name;
       request.fields['companyName'] = user.companyName;
@@ -1688,7 +1901,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
-        debugPrint('DEBUG: Document upload successful, status: ${response.statusCode}');
+        debugPrint(
+          'DEBUG: Document upload successful, status: ${response.statusCode}',
+        );
         debugPrint('DEBUG: Response body: ${response.body}');
 
         // Parse Nextcloud metadata from webhook response
@@ -1700,9 +1915,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
           // Update message: replace temp file with Nextcloud metadata
           setState(() {
-            final index = _messages.indexWhere((m) =>
-                m.timestamp == message.timestamp &&
-                m.attachmentType == AttachmentType.document);
+            final index = _messages.indexWhere(
+              (m) =>
+                  m.timestamp == message.timestamp &&
+                  m.attachmentType == AttachmentType.document,
+            );
             debugPrint('DEBUG: Found message at index: $index');
 
             if (index != -1) {
@@ -1710,12 +1927,14 @@ class _ChatScreenState extends State<ChatScreen> {
                 text: message.text,
                 isCustomer: message.isCustomer,
                 timestamp: message.timestamp,
-                documentFile: null,  // Remove temp file
+                documentFile: null, // Remove temp file
                 attachmentType: AttachmentType.document,
-                status: MessageStatus.sent,  // Mark as sent
-                mediaMetadata: metadata,  // Add Nextcloud data
+                status: MessageStatus.sent, // Mark as sent
+                mediaMetadata: metadata, // Add Nextcloud data
               );
-              debugPrint('DEBUG: Document updated with storage_url: ${metadata.storageUrl}');
+              debugPrint(
+                'DEBUG: Document updated with storage_url: ${metadata.storageUrl}',
+              );
             }
           });
 
@@ -1726,15 +1945,19 @@ class _ChatScreenState extends State<ChatScreen> {
           // Show "Team inlichten" banner after successful upload
           _displaySendToTeamBanner();
         } else {
-          debugPrint('DEBUG: Metadata was null - response not parsed correctly');
+          debugPrint(
+            'DEBUG: Metadata was null - response not parsed correctly',
+          );
         }
       } else {
         debugPrint('DEBUG: Upload failed with status: ${response.statusCode}');
         // Mark upload as failed
         setState(() {
-          final index = _messages.indexWhere((m) =>
-              m.timestamp == message.timestamp &&
-              m.attachmentType == AttachmentType.document);
+          final index = _messages.indexWhere(
+            (m) =>
+                m.timestamp == message.timestamp &&
+                m.attachmentType == AttachmentType.document,
+          );
           if (index != -1) {
             _messages[index] = ChatMessage(
               text: message.text,
@@ -1751,9 +1974,11 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint('Error uploading document: $e');
       // Mark as failed
       setState(() {
-        final index = _messages.indexWhere((m) =>
-            m.timestamp == message.timestamp &&
-            m.attachmentType == AttachmentType.document);
+        final index = _messages.indexWhere(
+          (m) =>
+              m.timestamp == message.timestamp &&
+              m.attachmentType == AttachmentType.document,
+        );
         if (index != -1) {
           _messages[index] = ChatMessage(
             text: message.text,
@@ -1923,7 +2148,8 @@ class _ChatScreenState extends State<ChatScreen> {
       final shouldShowBanner = result['shouldShowBanner'];
 
       setState(() {
-        _messages.insert(0,
+        _messages.insert(
+          0,
           ChatMessage(
             text: cleanText,
             isCustomer: false,
@@ -2018,7 +2244,8 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       setState(() {
-        _messages.insert(0,
+        _messages.insert(
+          0,
           ChatMessage(
             text: botResponse,
             isCustomer: false,
@@ -2090,7 +2317,8 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       setState(() {
-        _messages.insert(0,
+        _messages.insert(
+          0,
           ChatMessage(
             text: botResponse,
             isCustomer: false,
@@ -2166,7 +2394,8 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       setState(() {
-        _messages.insert(0,
+        _messages.insert(
+          0,
           ChatMessage(
             text: botResponse,
             isCustomer: false,
@@ -2242,7 +2471,8 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       setState(() {
-        _messages.insert(0,
+        _messages.insert(
+          0,
           ChatMessage(
             text: botResponse,
             isCustomer: false,
@@ -2482,7 +2712,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
                                   if (mounted) {
                                     // ignore: use_build_context_synchronously
-                                    ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+                                    ScaffoldMessenger.of(
+                                      scaffoldContext,
+                                    ).showSnackBar(
                                       const SnackBar(
                                         content: Text(
                                           'Kon sessie niet verwijderen. Probeer het opnieuw.',
@@ -2539,44 +2771,65 @@ class _ChatScreenState extends State<ChatScreen> {
     if (mounted) {
       showDialog(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text(
-            'Gesprek Informatie',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildInfoRow('Bedrijfsnaam', user?.companyName ?? 'Onbekend'),
-                const SizedBox(height: 12),
-                _buildInfoRow('Naam', user?.name ?? 'Onbekend'),
-                const SizedBox(height: 12),
-                _buildInfoRow('Sessie ID', sessionData.sessionId),
-                const SizedBox(height: 12),
-                _buildInfoRow('Titel', sessionData.title.isNotEmpty ? sessionData.title : 'Geen titel'),
-                const SizedBox(height: 12),
-                _buildInfoRow('Omschrijving', sessionData.description.isNotEmpty ? sessionData.description : 'Geen omschrijving', maxLines: null),
-                const SizedBox(height: 12),
-                _buildInfoRow('Chattype', sessionData.chatType ?? 'Onbekend'),
-                const SizedBox(height: 12),
-                _buildInfoRow('Aangemaakt op', formatDate(sessionData.createdAt)),
-                const SizedBox(height: 12),
-                _buildInfoRow('Laatst gewijzigd', formatDate(sessionData.lastActivity)),
+        builder:
+            (context) => AlertDialog(
+              title: const Text(
+                'Gesprek Informatie',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInfoRow(
+                      'Bedrijfsnaam',
+                      user?.companyName ?? 'Onbekend',
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow('Naam', user?.name ?? 'Onbekend'),
+                    const SizedBox(height: 12),
+                    _buildInfoRow('Sessie ID', sessionData.sessionId),
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      'Titel',
+                      sessionData.title.isNotEmpty
+                          ? sessionData.title
+                          : 'Geen titel',
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      'Omschrijving',
+                      sessionData.description.isNotEmpty
+                          ? sessionData.description
+                          : 'Geen omschrijving',
+                      maxLines: null,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      'Chattype',
+                      sessionData.chatType ?? 'Onbekend',
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      'Aangemaakt op',
+                      formatDate(sessionData.createdAt),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      'Laatst gewijzigd',
+                      formatDate(sessionData.lastActivity),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Sluiten'),
+                ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Sluiten'),
-            ),
-          ],
-        ),
       );
     }
   }
@@ -2596,12 +2849,10 @@ class _ChatScreenState extends State<ChatScreen> {
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Colors.black87,
-          ),
+          style: const TextStyle(fontSize: 14, color: Colors.black87),
           maxLines: maxLines,
-          overflow: maxLines != null ? TextOverflow.ellipsis : TextOverflow.visible,
+          overflow:
+              maxLines != null ? TextOverflow.ellipsis : TextOverflow.visible,
         ),
       ],
     );
@@ -2653,7 +2904,8 @@ class _ChatScreenState extends State<ChatScreen> {
         debugPrint('DEBUG: Current _chatType value: $_chatType');
         debugPrint('DEBUG: Widget mounted: $mounted');
 
-        if (sessionTitle != null && sessionTitle.isNotEmpty &&
+        if (sessionTitle != null &&
+            sessionTitle.isNotEmpty &&
             !sessionTitle.startsWith('newsession_') &&
             !sessionTitle.startsWith('session_')) {
           debugPrint('DEBUG: Updating chat title to: $sessionTitle');
@@ -3008,7 +3260,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: const Row(
                         children: [
-                          Icon(Icons.info_outline, color: Colors.grey, size: 20),
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
                           SizedBox(width: 12),
                           Text(
                             'Gesprek Informatie',
@@ -3184,11 +3440,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Wil je nog iets toevoegen? Dat kan, type het hieronder!',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF166534),
-                  ),
+                  'Wil je nog iets toevoegen? Dat kan, typ het hieronder!',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF166534)),
                 ),
               ],
             ),
@@ -3223,7 +3476,7 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Alles verteld wat we moeten weten? Mooi! Mag het team ermee aan de slag?',
+              'Alle info compleet? Klik op verstuur, dan gaan wij aan de slag!',
               style: const TextStyle(
                 fontSize: 14,
                 color: Color(0xFF374151),
@@ -3249,7 +3502,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             child: const Text(
-              'Team inlichten',
+              'Klaar -> verstuur',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
           ),
@@ -3281,46 +3534,52 @@ class _ChatScreenState extends State<ChatScreen> {
         padding: EdgeInsets.only(bottom: keyboardHeight),
         child: Column(
           children: [
-          // Custom Header
-          Container(
-            padding: EdgeInsets.only(top: statusBarHeight),
-            child: _buildHeader(),
-          ),
+            // Custom Header
+            Container(
+              padding: EdgeInsets.only(top: statusBarHeight),
+              child: _buildHeader(),
+            ),
 
             // Chat messages
             Expanded(
               child: Align(
-                alignment: Alignment.topCenter,  // CRITICAL for keyboard response
+                alignment:
+                    Alignment.topCenter, // CRITICAL for keyboard response
                 child: GestureDetector(
                   onTap: () => FocusScope.of(context).unfocus(),
                   behavior: HitTestBehavior.opaque,
                   child: ListView.builder(
-                  reverse: true,  // Build from bottom - chat standard
-                  shrinkWrap: true,  // Takes only needed space - responds to keyboard
-                  controller: _scrollController,
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _messages.length + (_isLoading ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    // Show typing indicator at bottom (first item in reverse list) when loading
-                    if (index == 0 && _isLoading) {
-                      return TypingIndicator(isUploadingFile: _isUploadingFile);
-                    }
-                    // Adjust message index to account for typing indicator
-                    final messageIndex = _isLoading ? index - 1 : index;
-                    return ChatBubble(
-                      message: _messages[messageIndex],
-                      onImageLongPress: _showImageDeleteDialog,
-                      onDocumentLongPress: _showDocumentDeleteDialog,
-                      onDocumentTap: _openDocument,
-                      onVideoLongPress: _showVideoDeleteDialog,
-                      onVideoTap: _playVideo,
-                    );
-                  },
+                    reverse: true, // Build from bottom - chat standard
+                    shrinkWrap:
+                        true, // Takes only needed space - responds to keyboard
+                    controller: _scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length + (_isLoading ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      // Show typing indicator at bottom (first item in reverse list) when loading
+                      if (index == 0 && _isLoading) {
+                        return TypingIndicator(
+                          isUploadingFile: _isUploadingFile,
+                        );
+                      }
+                      // Adjust message index to account for typing indicator
+                      final messageIndex = _isLoading ? index - 1 : index;
+                      return ChatBubble(
+                        message: _messages[messageIndex],
+                        onImageLongPress: _showImageDeleteDialog,
+                        onImageTap: _viewImage,
+                        onDocumentLongPress: _showDocumentDeleteDialog,
+                        onDocumentTap: _openDocument,
+                        onVideoLongPress: _showVideoDeleteDialog,
+                        onVideoTap: _playVideo,
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
-          ),
 
             _buildEmailSentBanner(),
 
@@ -3367,118 +3626,118 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               child: Row(
                 children: [
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: Row(
-                          children: [
-                            // Attachment icon
-                            IconButton(
-                              onPressed:
-                                  _isLoading ? null : _showAttachmentDialog,
-                              icon: Icon(
-                                Icons.attach_file,
-                                color:
-                                    _isLoading
-                                        ? Colors.grey.shade400
-                                        : Colors.grey,
-                                size: 20,
-                              ),
-                            ),
-                            // Text input
-                            Expanded(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  minHeight:
-                                      48.0, // Single line height (24px text + 24px padding)
-                                  maxHeight:
-                                      144.0, // 6 lines height (6 * 24px text + 24px padding)
-                                ),
-                                child: TextField(
-                                  controller: _messageController,
-                                  onChanged: _onTextChanged,
-                                  onTap: _onTextFieldTapped,
-                                  enabled: !_isLoading,
-                                  decoration: InputDecoration(
-                                    hintText:
-                                        _isLoading
-                                            ? 'Even geduld...'
-                                            : 'Deel je blog idee...',
-                                    border: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                  ),
-                                  maxLines: null,
-                                  textInputAction: TextInputAction.newline,
-                                  scrollPhysics: const BouncingScrollPhysics(),
-                                ),
-                              ),
-                            ),
-                            // Camera icon
-                            IconButton(
-                              onPressed:
-                                  _isLoading ? null : _showImageSourceDialog,
-                              icon: Icon(
-                                Icons.camera_alt,
-                                color:
-                                    _isLoading
-                                        ? Colors.grey.shade400
-                                        : Colors.grey,
-                                size: 20,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Voice or Send button
-                    Container(
+                  Expanded(
+                    child: Container(
                       decoration: BoxDecoration(
-                        color:
-                            _isLoading
-                                ? Colors.grey
-                                : (_isRecording
-                                    ? Colors.red
-                                    : const Color(0xFFCC0001)),
-                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(24),
                       ),
-                      child: IconButton(
-                        onPressed:
-                            _isLoading
-                                ? null
-                                : (_isTyping
-                                    ? _sendMessage
-                                    : _isRecording
-                                    ? _stopRecording
-                                    : _startRecording),
-                        icon:
-                            _isLoading
-                                ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
+                      child: Row(
+                        children: [
+                          // Attachment icon
+                          IconButton(
+                            onPressed:
+                                _isLoading ? null : _showAttachmentDialog,
+                            icon: Icon(
+                              Icons.attach_file,
+                              color:
+                                  _isLoading
+                                      ? Colors.grey.shade400
+                                      : Colors.grey,
+                              size: 20,
+                            ),
+                          ),
+                          // Text input
+                          Expanded(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minHeight:
+                                    48.0, // Single line height (24px text + 24px padding)
+                                maxHeight:
+                                    144.0, // 6 lines height (6 * 24px text + 24px padding)
+                              ),
+                              child: TextField(
+                                controller: _messageController,
+                                onChanged: _onTextChanged,
+                                onTap: _onTextFieldTapped,
+                                enabled: !_isLoading,
+                                decoration: InputDecoration(
+                                  hintText:
+                                      _isLoading
+                                          ? 'Even geduld...'
+                                          : 'Deel je blog idee...',
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 12,
                                   ),
-                                )
-                                : Icon(
-                                  _isTyping
-                                      ? Icons.send
-                                      : (_isRecording ? Icons.stop : Icons.mic),
-                                  color: Colors.white,
                                 ),
+                                maxLines: null,
+                                textInputAction: TextInputAction.newline,
+                                scrollPhysics: const BouncingScrollPhysics(),
+                              ),
+                            ),
+                          ),
+                          // Camera icon
+                          IconButton(
+                            onPressed:
+                                _isLoading ? null : _showImageSourceDialog,
+                            icon: Icon(
+                              Icons.camera_alt,
+                              color:
+                                  _isLoading
+                                      ? Colors.grey.shade400
+                                      : Colors.grey,
+                              size: 20,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Voice or Send button
+                  Container(
+                    decoration: BoxDecoration(
+                      color:
+                          _isLoading
+                              ? Colors.grey
+                              : (_isRecording
+                                  ? Colors.red
+                                  : const Color(0xFFCC0001)),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      onPressed:
+                          _isLoading
+                              ? null
+                              : (_isTyping
+                                  ? _sendMessage
+                                  : _isRecording
+                                  ? _stopRecording
+                                  : _startRecording),
+                      icon:
+                          _isLoading
+                              ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                              : Icon(
+                                _isTyping
+                                    ? Icons.send
+                                    : (_isRecording ? Icons.stop : Icons.mic),
+                                color: Colors.white,
+                              ),
+                    ),
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),
@@ -3492,9 +3751,9 @@ class MediaMetadata {
   final String id;
   final String sessionId;
   final String filename;
-  final String? description;  // Only for images
-  final String? seoTitle;     // Only for images
-  final String? mimeType;     // Only for documents/videos
+  final String? description; // Only for images
+  final String? seoTitle; // Only for images
+  final String? mimeType; // Only for documents/videos
   final String storageUrl;
   final String? thumbnailUrl; // Only for videos
   final DateTime createdAt;
@@ -3514,21 +3773,23 @@ class MediaMetadata {
   String get previewUrl => '$storageUrl/preview';
 
   // For videos: use thumbnail_url + '/preview' to show video thumbnail
-  String? get thumbnailPreviewUrl => thumbnailUrl != null ? '$thumbnailUrl/preview' : null;
+  String? get thumbnailPreviewUrl =>
+      thumbnailUrl != null ? '$thumbnailUrl/preview' : null;
 
   factory MediaMetadata.fromJson(Map<String, dynamic> json) {
     return MediaMetadata(
       id: json['id'] ?? '',
       sessionId: json['session_id'] ?? '',
       filename: json['filename'] ?? '',
-      description: json['description'],  // Optional - only for images
-      seoTitle: json['seo_title'],       // Optional - only for images
-      mimeType: json['mime_type'],       // Optional - only for docs/videos
+      description: json['description'], // Optional - only for images
+      seoTitle: json['seo_title'], // Optional - only for images
+      mimeType: json['mime_type'], // Optional - only for docs/videos
       storageUrl: json['storage_url'] ?? '',
-      thumbnailUrl: json['thumbnail_url'],  // Optional - only for videos
-      createdAt: json['created_at'] != null
-        ? DateTime.parse(json['created_at'])
-        : DateTime.now(),
+      thumbnailUrl: json['thumbnail_url'], // Optional - only for videos
+      createdAt:
+          json['created_at'] != null
+              ? DateTime.parse(json['created_at'])
+              : DateTime.now(),
     );
   }
 
@@ -3557,12 +3818,13 @@ class ChatMessage {
   final File? imageFile;
   final File? documentFile;
   final File? videoFile;
-  final File? videoThumbnailFile;  // Local temp thumbnail during upload
+  final File? videoThumbnailFile; // Local temp thumbnail during upload
   final AttachmentType attachmentType;
   final MessageStatus status;
   final bool fromFCM;
   final bool autoPlay;
-  final MediaMetadata? mediaMetadata;  // Nextcloud storage metadata for images/videos/documents
+  final MediaMetadata?
+  mediaMetadata; // Nextcloud storage metadata for images/videos/documents
 
   ChatMessage({
     required this.text,
@@ -3615,13 +3877,16 @@ class ChatMessage {
       videoFile:
           json['videoFilePath'] != null ? File(json['videoFilePath']) : null,
       videoThumbnailFile:
-          json['videoThumbnailFilePath'] != null ? File(json['videoThumbnailFilePath']) : null,
+          json['videoThumbnailFilePath'] != null
+              ? File(json['videoThumbnailFilePath'])
+              : null,
       attachmentType: _parseAttachmentType(json['attachmentType']),
       status: _parseMessageStatus(json['status']),
       fromFCM: json['fromFCM'] ?? false,
-      mediaMetadata: json['mediaMetadata'] != null
-          ? MediaMetadata.fromJson(json['mediaMetadata'])
-          : null,
+      mediaMetadata:
+          json['mediaMetadata'] != null
+              ? MediaMetadata.fromJson(json['mediaMetadata'])
+              : null,
     );
   }
 
@@ -3660,6 +3925,7 @@ class ChatMessage {
 class ChatBubble extends StatelessWidget {
   final ChatMessage message;
   final Function(ChatMessage)? onImageLongPress;
+  final Function(ChatMessage)? onImageTap;
   final Function(ChatMessage)? onDocumentLongPress;
   final Function(ChatMessage)? onDocumentTap;
   final Function(ChatMessage)? onVideoLongPress;
@@ -3669,6 +3935,7 @@ class ChatBubble extends StatelessWidget {
     super.key,
     required this.message,
     this.onImageLongPress,
+    this.onImageTap,
     this.onDocumentLongPress,
     this.onDocumentTap,
     this.onVideoLongPress,
@@ -3722,7 +3989,8 @@ class ChatBubble extends StatelessWidget {
                           autoPlay: message.autoPlay,
                         )
                       else if (message.attachmentType == AttachmentType.image &&
-                          (message.imageFile != null || message.mediaMetadata != null))
+                          (message.imageFile != null ||
+                              message.mediaMetadata != null))
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -3730,11 +3998,17 @@ class ChatBubble extends StatelessWidget {
                               imageFile: message.imageFile,
                               imageUrl: message.mediaMetadata?.previewUrl,
                               isCustomer: message.isCustomer,
-                              isUploading: message.status == MessageStatus.uploading,
+                              isUploading:
+                                  message.status == MessageStatus.uploading,
                               title: message.mediaMetadata?.filename,
-                              onLongPress: onImageLongPress != null
-                                ? () => onImageLongPress!(message)
-                                : null,
+                              onTap:
+                                  onImageTap != null
+                                      ? () => onImageTap!(message)
+                                      : null,
+                              onLongPress:
+                                  onImageLongPress != null
+                                      ? () => onImageLongPress!(message)
+                                      : null,
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -3751,7 +4025,8 @@ class ChatBubble extends StatelessWidget {
                         )
                       else if (message.attachmentType ==
                               AttachmentType.document &&
-                          (message.documentFile != null || message.mediaMetadata != null))
+                          (message.documentFile != null ||
+                              message.mediaMetadata != null))
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -3759,20 +4034,31 @@ class ChatBubble extends StatelessWidget {
                               documentFile: message.documentFile,
                               documentUrl: message.mediaMetadata?.previewUrl,
                               isCustomer: message.isCustomer,
-                              fileName: message.mediaMetadata?.filename ??
-                                  (message.documentFile != null && message.documentFile!.existsSync()
-                                    ? AttachmentService.getFileInfo(message.documentFile!)['fileName']
-                                    : 'Document'),
-                              fileSize: message.documentFile != null && message.documentFile!.existsSync()
-                                  ? AttachmentService.getFileInfo(message.documentFile!)['size']
-                                  : 0,
-                              isUploading: message.status == MessageStatus.uploading,
-                              onTap: onDocumentTap != null
-                                ? () => onDocumentTap!(message)
-                                : null,
-                              onLongPress: onDocumentLongPress != null
-                                ? () => onDocumentLongPress!(message)
-                                : null,
+                              fileName:
+                                  message.mediaMetadata?.filename ??
+                                  (message.documentFile != null &&
+                                          message.documentFile!.existsSync()
+                                      ? AttachmentService.getFileInfo(
+                                        message.documentFile!,
+                                      )['fileName']
+                                      : 'Document'),
+                              fileSize:
+                                  message.documentFile != null &&
+                                          message.documentFile!.existsSync()
+                                      ? AttachmentService.getFileInfo(
+                                        message.documentFile!,
+                                      )['size']
+                                      : 0,
+                              isUploading:
+                                  message.status == MessageStatus.uploading,
+                              onTap:
+                                  onDocumentTap != null
+                                      ? () => onDocumentTap!(message)
+                                      : null,
+                              onLongPress:
+                                  onDocumentLongPress != null
+                                      ? () => onDocumentLongPress!(message)
+                                      : null,
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -3794,16 +4080,20 @@ class ChatBubble extends StatelessWidget {
                           children: [
                             VideoMessageWidget(
                               thumbnailFile: message.videoThumbnailFile,
-                              thumbnailUrl: message.mediaMetadata?.thumbnailPreviewUrl,
+                              thumbnailUrl:
+                                  message.mediaMetadata?.thumbnailPreviewUrl,
                               isCustomer: message.isCustomer,
-                              isUploading: message.status == MessageStatus.uploading,
+                              isUploading:
+                                  message.status == MessageStatus.uploading,
                               title: message.mediaMetadata!.filename,
-                              onTap: onVideoTap != null
-                                ? () => onVideoTap!(message)
-                                : null,
-                              onLongPress: onVideoLongPress != null
-                                ? () => onVideoLongPress!(message)
-                                : null,
+                              onTap:
+                                  onVideoTap != null
+                                      ? () => onVideoTap!(message)
+                                      : null,
+                              onLongPress:
+                                  onVideoLongPress != null
+                                      ? () => onVideoLongPress!(message)
+                                      : null,
                             ),
                             const SizedBox(height: 4),
                             Text(

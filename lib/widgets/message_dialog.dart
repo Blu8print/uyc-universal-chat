@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
-Future<void> showCustomMessageDialog(BuildContext context, String message) async {
+Future<void> showCustomMessageDialog(
+  BuildContext context,
+  String message,
+) async {
   if (message.trim().isEmpty) return;
-  
+
   await showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -15,10 +18,7 @@ Future<void> showCustomMessageDialog(BuildContext context, String message) async
             fontWeight: FontWeight.bold,
           ),
         ),
-        content: Text(
-          message,
-          style: const TextStyle(fontSize: 16),
-        ),
+        content: Text(message, style: const TextStyle(fontSize: 16)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

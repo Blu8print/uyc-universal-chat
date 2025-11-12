@@ -100,20 +100,16 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
             children: [
               const Text(
                 'Audio bericht',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               Text(
-                _duration > Duration.zero 
+                _duration > Duration.zero
                     ? '${_formatDuration(_position)} / ${_formatDuration(_duration)}'
                     : widget.duration,
                 style: TextStyle(
                   fontSize: 12,
-                  color: widget.isCustomer 
-                      ? Colors.white70 
-                      : Colors.grey.shade600,
+                  color:
+                      widget.isCustomer ? Colors.white70 : Colors.grey.shade600,
                 ),
               ),
             ],
@@ -122,9 +118,7 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
           Icon(
             Icons.mic,
             size: 20,
-            color: widget.isCustomer 
-                ? Colors.white70 
-                : Colors.grey.shade600,
+            color: widget.isCustomer ? Colors.white70 : Colors.grey.shade600,
           ),
         ],
       ),

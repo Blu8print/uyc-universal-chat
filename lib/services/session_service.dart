@@ -8,31 +8,33 @@ class SessionService {
   static String? _currentSessionId;
   static SessionData? _currentSessionData;
   static List<SessionData> _sessionList = [];
-  
+
   // Get current session ID
   static String? get currentSessionId => _currentSessionId;
-  
+
   // Get current session data
   static SessionData? get currentSessionData => _currentSessionData;
-  
+
   // Get session list
   static List<SessionData> get sessionList => _sessionList;
-  
+
   // Initialize session service - load or create session
   static Future<void> initialize() async {
     await _loadOrCreateSession();
   }
-  
-  // Generate new session ID 
+
+  // Generate new session ID
   static String _generateSessionId() {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     return 'session_$timestamp';
   }
-  
+
   // Start new session with backend sync
   static Future<String> startNewSession({String? chatType}) async {
     _currentSessionId = _generateSessionId();
-    debugPrint('[SessionService] Creating new session: $_currentSessionId${chatType != null ? " (chatType: $chatType)" : ""}');
+    debugPrint(
+      '[SessionService] Creating new session: $_currentSessionId${chatType != null ? " (chatType: $chatType)" : ""}',
+    );
     await _saveSessionId(_currentSessionId!);
 
     // Try to create session on backend
@@ -40,7 +42,7 @@ class SessionService {
 
     return _currentSessionId!;
   }
-  
+
   // Load existing session or create new one
   static Future<void> _loadOrCreateSession() async {
     try {
@@ -49,11 +51,15 @@ class SessionService {
 
       // If no session exists, create a new one
       if (_currentSessionId == null) {
-        debugPrint('[SessionService] No existing session found, creating new one');
+        debugPrint(
+          '[SessionService] No existing session found, creating new one',
+        );
         await startNewSession();
       } else {
         // Load session data for existing session
-        _currentSessionData = await StorageService.loadSessionData(_currentSessionId!);
+        _currentSessionData = await StorageService.loadSessionData(
+          _currentSessionId!,
+        );
       }
     } catch (e) {
       debugPrint('Error loading session: $e');
@@ -61,7 +67,7 @@ class SessionService {
       await startNewSession();
     }
   }
-  
+
   // Save session ID to storage
   static Future<void> _saveSessionId(String sessionId) async {
     try {
@@ -71,16 +77,18 @@ class SessionService {
       debugPrint('Error saving session ID: $e');
     }
   }
-  
+
   // End current session and start new one
   static Future<String> resetSession({String? chatType}) async {
     return await startNewSession(chatType: chatType);
   }
-  
+
   // Clear session data
   static Future<void> clearSession() async {
     try {
-      debugPrint('[SessionService] Clearing current session: $_currentSessionId');
+      debugPrint(
+        '[SessionService] Clearing current session: $_currentSessionId',
+      );
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_sessionIdKey);
       _currentSessionId = null;
@@ -89,9 +97,12 @@ class SessionService {
       debugPrint('Error clearing session: $e');
     }
   }
-  
+
   // Create session on backend
-  static Future<void> _createSessionOnBackend(String sessionId, {String? chatType}) async {
+  static Future<void> _createSessionOnBackend(
+    String sessionId, {
+    String? chatType,
+  }) async {
     try {
       final user = await StorageService.getUser();
       if (user != null) {
@@ -102,19 +113,21 @@ class SessionService {
           companyName: user.companyName,
           chatType: chatType,
         );
-        
+
         if (response.success && response.sessionData != null) {
           _currentSessionData = response.sessionData;
           await StorageService.saveSessionData(response.sessionData!);
         } else {
-          debugPrint('Failed to create session on backend: ${response.message}');
+          debugPrint(
+            'Failed to create session on backend: ${response.message}',
+          );
         }
       }
     } catch (e) {
       debugPrint('Error creating session on backend: $e');
     }
   }
-  
+
   // Sync session list from backend
   static Future<bool> syncSessionList() async {
     try {
@@ -125,7 +138,7 @@ class SessionService {
           name: user.name,
           companyName: user.companyName,
         );
-        
+
         if (response.success) {
           _sessionList = response.sessions;
           await StorageService.saveSessionList(_sessionList);
@@ -141,7 +154,7 @@ class SessionService {
       return false;
     }
   }
-  
+
   // Load session list from cache
   static Future<void> loadSessionListFromCache() async {
     try {
@@ -153,7 +166,7 @@ class SessionService {
       _sessionList = [];
     }
   }
-  
+
   // Update current session metadata
   static Future<bool> updateCurrentSession({
     String? title,
@@ -165,6 +178,9 @@ class SessionService {
     try {
       final user = await StorageService.getUser();
       if (user != null) {
+        // Calculate isOwner based on phoneNumber match
+        final isOwner = _currentSessionData?.phoneNumber == user.phoneNumber;
+
         final response = await ApiService.updateSession(
           sessionId: _currentSessionId!,
           phoneNumber: user.phoneNumber,
@@ -172,6 +188,7 @@ class SessionService {
           companyName: user.companyName,
           title: title,
           description: description,
+          isOwner: isOwner,
           messages: messages,
         );
 
@@ -196,7 +213,9 @@ class SessionService {
     if (_currentSessionId == null || _currentSessionData == null) return;
 
     try {
-      debugPrint('[SessionService] Marking session as email sent: $_currentSessionId');
+      debugPrint(
+        '[SessionService] Marking session as email sent: $_currentSessionId',
+      );
 
       // Create updated session data with emailSent flag
       final updatedSessionData = SessionData(
@@ -218,7 +237,9 @@ class SessionService {
       await StorageService.saveSessionData(updatedSessionData);
 
       // Update in session list to keep it synced
-      final index = _sessionList.indexWhere((s) => s.sessionId == _currentSessionId);
+      final index = _sessionList.indexWhere(
+        (s) => s.sessionId == _currentSessionId,
+      );
       if (index != -1) {
         _sessionList[index] = updatedSessionData;
         await StorageService.saveSessionList(_sessionList);
@@ -227,12 +248,16 @@ class SessionService {
       // Send emailSent flag to backend webhook
       final user = await StorageService.getUser();
       if (user != null) {
+        // Calculate isOwner based on phoneNumber match
+        final isOwner = _currentSessionData?.phoneNumber == user.phoneNumber;
+
         await ApiService.updateSession(
           sessionId: _currentSessionId!,
           phoneNumber: user.phoneNumber,
           name: user.name,
           companyName: user.companyName,
           emailSent: true,
+          isOwner: isOwner,
         );
         debugPrint('[SessionService] Email sent flag updated on backend');
       }
@@ -252,24 +277,24 @@ class SessionService {
           name: user.name,
           companyName: user.companyName,
         );
-        
+
         if (response.success) {
           // Remove from local list
           _sessionList.removeWhere((session) => session.sessionId == sessionId);
           await StorageService.saveSessionList(_sessionList);
-          
+
           // Clear all chat messages for this session from device
           await StorageService.clearMessages(sessionId);
-          
+
           // Clear session metadata from device
           await StorageService.clearSessionData(sessionId);
-          
+
           // If deleting current session, clear it
           if (_currentSessionId == sessionId) {
             _currentSessionId = null;
             _currentSessionData = null;
           }
-          
+
           return true;
         } else {
           debugPrint('Failed to delete session: ${response.message}');
@@ -282,7 +307,185 @@ class SessionService {
       return false;
     }
   }
-  
+
+  // Pin session
+  static Future<bool> pinSession(String sessionId) async {
+    try {
+      final user = await StorageService.getUser();
+      if (user != null) {
+        // Optimistically update local state
+        final index = _sessionList.indexWhere((s) => s.sessionId == sessionId);
+        if (index != -1) {
+          final session = _sessionList[index];
+          final updatedSession = SessionData(
+            sessionId: session.sessionId,
+            title: session.title,
+            description: session.description,
+            thumbnail: session.thumbnail,
+            lastActivity: session.lastActivity,
+            messageCount: session.messageCount,
+            createdAt: session.createdAt,
+            chatType: session.chatType,
+            emailSent: session.emailSent,
+            userId: session.userId,
+            companyName: session.companyName,
+            userName: session.userName,
+            messages: session.messages,
+            phoneNumber: session.phoneNumber,
+            isOwner: session.isOwner,
+            isPinned: true,
+          );
+
+          _sessionList[index] = updatedSession;
+
+          // Update current session data if it's the current session
+          if (_currentSessionId == sessionId) {
+            _currentSessionData = updatedSession;
+            await StorageService.saveSessionData(updatedSession);
+          }
+
+          // Save to local storage
+          await StorageService.saveSessionList(_sessionList);
+        }
+
+        // Call API
+        final response = await ApiService.pinSession(
+          sessionId: sessionId,
+          phoneNumber: user.phoneNumber,
+          name: user.name,
+          companyName: user.companyName,
+        );
+
+        if (response.success) {
+          debugPrint(
+            '[SessionService] Session pinned successfully: $sessionId',
+          );
+          return true;
+        } else {
+          debugPrint('Failed to pin session: ${response.message}');
+          // Revert optimistic update on failure
+          if (index != -1) {
+            final session = _sessionList[index];
+            final revertedSession = SessionData(
+              sessionId: session.sessionId,
+              title: session.title,
+              description: session.description,
+              thumbnail: session.thumbnail,
+              lastActivity: session.lastActivity,
+              messageCount: session.messageCount,
+              createdAt: session.createdAt,
+              chatType: session.chatType,
+              emailSent: session.emailSent,
+              userId: session.userId,
+              companyName: session.companyName,
+              userName: session.userName,
+              messages: session.messages,
+              phoneNumber: session.phoneNumber,
+              isOwner: session.isOwner,
+              isPinned: false,
+            );
+            _sessionList[index] = revertedSession;
+            await StorageService.saveSessionList(_sessionList);
+          }
+          return false;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error pinning session: $e');
+      return false;
+    }
+  }
+
+  // Unpin session
+  static Future<bool> unpinSession(String sessionId) async {
+    try {
+      final user = await StorageService.getUser();
+      if (user != null) {
+        // Optimistically update local state
+        final index = _sessionList.indexWhere((s) => s.sessionId == sessionId);
+        if (index != -1) {
+          final session = _sessionList[index];
+          final updatedSession = SessionData(
+            sessionId: session.sessionId,
+            title: session.title,
+            description: session.description,
+            thumbnail: session.thumbnail,
+            lastActivity: session.lastActivity,
+            messageCount: session.messageCount,
+            createdAt: session.createdAt,
+            chatType: session.chatType,
+            emailSent: session.emailSent,
+            userId: session.userId,
+            companyName: session.companyName,
+            userName: session.userName,
+            messages: session.messages,
+            phoneNumber: session.phoneNumber,
+            isOwner: session.isOwner,
+            isPinned: false,
+          );
+
+          _sessionList[index] = updatedSession;
+
+          // Update current session data if it's the current session
+          if (_currentSessionId == sessionId) {
+            _currentSessionData = updatedSession;
+            await StorageService.saveSessionData(updatedSession);
+          }
+
+          // Save to local storage
+          await StorageService.saveSessionList(_sessionList);
+        }
+
+        // Call API
+        final response = await ApiService.unpinSession(
+          sessionId: sessionId,
+          phoneNumber: user.phoneNumber,
+          name: user.name,
+          companyName: user.companyName,
+        );
+
+        if (response.success) {
+          debugPrint(
+            '[SessionService] Session unpinned successfully: $sessionId',
+          );
+          return true;
+        } else {
+          debugPrint('Failed to unpin session: ${response.message}');
+          // Revert optimistic update on failure
+          if (index != -1) {
+            final session = _sessionList[index];
+            final revertedSession = SessionData(
+              sessionId: session.sessionId,
+              title: session.title,
+              description: session.description,
+              thumbnail: session.thumbnail,
+              lastActivity: session.lastActivity,
+              messageCount: session.messageCount,
+              createdAt: session.createdAt,
+              chatType: session.chatType,
+              emailSent: session.emailSent,
+              userId: session.userId,
+              companyName: session.companyName,
+              userName: session.userName,
+              messages: session.messages,
+              phoneNumber: session.phoneNumber,
+              isOwner: session.isOwner,
+              isPinned: true,
+            );
+            _sessionList[index] = revertedSession;
+            await StorageService.saveSessionList(_sessionList);
+          }
+          return false;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error unpinning session: $e');
+      return false;
+    }
+  }
+
   // Switch to different session
   static Future<bool> switchToSession(String sessionId) async {
     try {
@@ -290,32 +493,33 @@ class SessionService {
       // Save current session ID
       _currentSessionId = sessionId;
       await _saveSessionId(sessionId);
-      
+
       // Load session data for this session
       final sessionData = _sessionList.firstWhere(
         (session) => session.sessionId == sessionId,
-        orElse: () => SessionData(
-          sessionId: sessionId,
-          title: 'Session',
-          description: '',
-        ),
+        orElse:
+            () => SessionData(
+              sessionId: sessionId,
+              title: 'Session',
+              description: '',
+            ),
       );
-      
+
       _currentSessionData = sessionData;
       await StorageService.saveSessionData(sessionData);
-      
+
       return true;
     } catch (e) {
       debugPrint('Error switching session: $e');
       return false;
     }
   }
-  
+
   // Initialize with session sync
   static Future<void> initializeWithSync() async {
     await initialize();
     await loadSessionListFromCache();
-    
+
     // Try to sync with backend in background
     syncSessionList().then((success) {
       if (success) {
@@ -324,17 +528,22 @@ class SessionService {
     });
   }
 
-  // Helper method to sort sessions by date (most recent first)
+  // Helper method to sort sessions by pin status and date (pinned first, then most recent first)
   static void _sortSessionsByDate(List<SessionData> sessions) {
     sessions.sort((a, b) {
+      // First, sort by pin status (pinned sessions first)
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+
+      // Then sort by date within each group
       final aDate = DateTime.tryParse(a.lastActivity ?? a.createdAt ?? '');
       final bDate = DateTime.tryParse(b.lastActivity ?? b.createdAt ?? '');
-      
+
       // Handle null dates
       if (aDate == null && bDate == null) return 0;
       if (aDate == null) return 1; // Put null dates at the end
       if (bDate == null) return -1; // Put null dates at the end
-      
+
       // Sort in descending order (newest first)
       return bDate.compareTo(aDate);
     });

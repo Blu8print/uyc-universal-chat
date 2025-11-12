@@ -4,8 +4,10 @@ import 'package:http/http.dart' as http;
 import 'session_service.dart';
 
 class DocumentRoutingService {
-  static const String _documentWebhookUrl = 'https://automation.kwaaijongens.nl/webhook/media_document';
-  static const String _chatWebhookUrl = 'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
+  static const String _documentWebhookUrl =
+      'https://automation.kwaaijongens.nl/webhook/media_document';
+  static const String _chatWebhookUrl =
+      'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
 
   // Basic Auth credentials
   static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
@@ -18,20 +20,29 @@ class DocumentRoutingService {
 
   static const Set<String> _routedDocumentTypes = {
     'pdf',
-    'doc', 'docx', 'odt',
-    'xls', 'xlsx',
-    'ppt', 'pptx'
+    'doc',
+    'docx',
+    'odt',
+    'xls',
+    'xlsx',
+    'ppt',
+    'pptx',
   };
 
   static bool shouldRouteToDocumentWebhook(String extension) {
     return _routedDocumentTypes.contains(extension.toLowerCase());
   }
 
-  static Future<bool> sendDocument(File file, String fileName, String extension) async {
+  static Future<bool> sendDocument(
+    File file,
+    String fileName,
+    String extension,
+  ) async {
     try {
-      final url = shouldRouteToDocumentWebhook(extension)
-          ? _documentWebhookUrl
-          : _chatWebhookUrl;
+      final url =
+          shouldRouteToDocumentWebhook(extension)
+              ? _documentWebhookUrl
+              : _chatWebhookUrl;
 
       final request = http.MultipartRequest('POST', Uri.parse(url));
 
@@ -59,8 +70,8 @@ class DocumentRoutingService {
   }
 
   static String getWebhookUrl(String extension) {
-    return shouldRouteToDocumentWebhook(extension) 
-        ? _documentWebhookUrl 
+    return shouldRouteToDocumentWebhook(extension)
+        ? _documentWebhookUrl
         : _chatWebhookUrl;
   }
 }

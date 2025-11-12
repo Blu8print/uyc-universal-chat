@@ -19,7 +19,7 @@ class LocationMessageWidget extends StatelessWidget {
   Future<void> _openInMaps() async {
     final url = AttachmentService.generateMapsUrl(latitude, longitude);
     final uri = Uri.parse(url);
-    
+
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -31,7 +31,10 @@ class LocationMessageWidget extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 280),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isCustomer ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade50,
+        color:
+            isCustomer
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isCustomer ? Colors.white24 : Colors.grey.shade300,
@@ -48,7 +51,10 @@ class LocationMessageWidget extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: isCustomer ? Colors.white24 : const Color(0xFFCC0001).withValues(alpha: 0.1),
+                  color:
+                      isCustomer
+                          ? Colors.white24
+                          : const Color(0xFFCC0001).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -75,7 +81,8 @@ class LocationMessageWidget extends StatelessWidget {
                     Text(
                       address,
                       style: TextStyle(
-                        color: isCustomer ? Colors.white70 : Colors.grey.shade600,
+                        color:
+                            isCustomer ? Colors.white70 : Colors.grey.shade600,
                         fontSize: 12,
                       ),
                       maxLines: 2,
@@ -92,7 +99,10 @@ class LocationMessageWidget extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: isCustomer ? Colors.white24 : const Color(0xFFCC0001).withValues(alpha: 0.1),
+                color:
+                    isCustomer
+                        ? Colors.white24
+                        : const Color(0xFFCC0001).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
@@ -107,7 +117,8 @@ class LocationMessageWidget extends StatelessWidget {
                   Text(
                     'Bekijk in kaarten',
                     style: TextStyle(
-                      color: isCustomer ? Colors.white : const Color(0xFFCC0001),
+                      color:
+                          isCustomer ? Colors.white : const Color(0xFFCC0001),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),

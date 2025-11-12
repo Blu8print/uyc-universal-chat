@@ -115,7 +115,7 @@ class FirebaseMessagingService {
       if (kDebugMode) {
         print('Foreground message received: ${message.toMap()}');
       }
-      
+
       if (_onMessageReceived != null && message.data.isNotEmpty) {
         _onMessageReceived!(message.data);
       }
@@ -126,7 +126,7 @@ class FirebaseMessagingService {
       if (kDebugMode) {
         print('Message clicked: ${message.toMap()}');
       }
-      
+
       if (_onMessageReceived != null && message.data.isNotEmpty) {
         _onMessageReceived!(message.data);
       }
@@ -138,7 +138,7 @@ class FirebaseMessagingService {
       if (kDebugMode) {
         print('App opened from terminated state: ${initialMessage.toMap()}');
       }
-      
+
       if (_onMessageReceived != null && initialMessage.data.isNotEmpty) {
         _onMessageReceived!(initialMessage.data);
       }

@@ -15,10 +15,10 @@ class StorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userJson = jsonEncode(user.toJson());
-      
+
       await prefs.setString(_userKey, userJson);
       await prefs.setBool(_isLoggedInKey, true);
-      
+
       return true;
     } catch (e) {
       debugPrint('Error saving user: $e');
@@ -31,7 +31,7 @@ class StorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userJson = prefs.getString(_userKey);
-      
+
       if (userJson != null) {
         final userMap = jsonDecode(userJson);
         return User.fromJson(userMap);
@@ -80,7 +80,10 @@ class StorageService {
   }
 
   // Save messages for a session
-  static Future<bool> saveMessages(String sessionId, List<Map<String, dynamic>> messages) async {
+  static Future<bool> saveMessages(
+    String sessionId,
+    List<Map<String, dynamic>> messages,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final messagesJson = jsonEncode(messages);
@@ -93,11 +96,13 @@ class StorageService {
   }
 
   // Load messages for a session
-  static Future<List<Map<String, dynamic>>> loadMessages(String sessionId) async {
+  static Future<List<Map<String, dynamic>>> loadMessages(
+    String sessionId,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final messagesJson = prefs.getString('messages_$sessionId');
-      
+
       if (messagesJson != null) {
         final List<dynamic> messagesList = jsonDecode(messagesJson);
         return messagesList.cast<Map<String, dynamic>>();
@@ -126,7 +131,10 @@ class StorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final sessionJson = jsonEncode(sessionData.toJson());
-      await prefs.setString('$_sessionDataKey${sessionData.sessionId}', sessionJson);
+      await prefs.setString(
+        '$_sessionDataKey${sessionData.sessionId}',
+        sessionJson,
+      );
       return true;
     } catch (e) {
       debugPrint('Error saving session data: $e');
@@ -139,7 +147,7 @@ class StorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final sessionJson = prefs.getString('$_sessionDataKey$sessionId');
-      
+
       if (sessionJson != null) {
         final sessionMap = jsonDecode(sessionJson);
         return SessionData.fromJson(sessionMap);
@@ -169,10 +177,12 @@ class StorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final sessionsJson = prefs.getString(_sessionListKey);
-      
+
       if (sessionsJson != null) {
         final List<dynamic> sessionsList = jsonDecode(sessionsJson);
-        return sessionsList.map((sessionMap) => SessionData.fromJson(sessionMap)).toList();
+        return sessionsList
+            .map((sessionMap) => SessionData.fromJson(sessionMap))
+            .toList();
       }
       return [];
     } catch (e) {
@@ -198,16 +208,16 @@ class StorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final keys = prefs.getKeys();
-      
+
       // Remove all session-related keys
       for (String key in keys) {
-        if (key.startsWith('messages_') || 
-            key.startsWith(_sessionDataKey) || 
+        if (key.startsWith('messages_') ||
+            key.startsWith(_sessionDataKey) ||
             key == _sessionListKey) {
           await prefs.remove(key);
         }
       }
-      
+
       return true;
     } catch (e) {
       debugPrint('Error clearing all session data: $e');
@@ -220,12 +230,12 @@ class StorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final keys = prefs.getKeys();
-      
+
       int sessionCount = 0;
       int messageKeys = 0;
       int totalMessageSize = 0;
       int sessionDataSize = 0;
-      
+
       for (String key in keys) {
         if (key.startsWith('messages_')) {
           messageKeys++;
@@ -237,14 +247,15 @@ class StorageService {
           sessionDataSize += sessionJson.length;
         }
       }
-      
+
       return {
         'sessionCount': sessionCount,
         'messageSessionCount': messageKeys,
         'totalMessageSizeBytes': totalMessageSize,
         'sessionDataSizeBytes': sessionDataSize,
         'totalSizeBytes': totalMessageSize + sessionDataSize,
-        'averageMessageSizePerSession': messageKeys > 0 ? totalMessageSize / messageKeys : 0,
+        'averageMessageSizePerSession':
+            messageKeys > 0 ? totalMessageSize / messageKeys : 0,
       };
     } catch (e) {
       debugPrint('Error getting storage stats: $e');

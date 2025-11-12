@@ -12,7 +12,17 @@ class AttachmentService {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'odt'],
+        allowedExtensions: [
+          'pdf',
+          'doc',
+          'docx',
+          'xls',
+          'xlsx',
+          'ppt',
+          'pptx',
+          'txt',
+          'odt',
+        ],
         allowMultiple: false,
         withData: false,
         withReadStream: false,
@@ -20,13 +30,13 @@ class AttachmentService {
 
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
-        
+
         // Check file size
         final fileSize = await file.length();
         if (fileSize > maxFileSizeBytes) {
           throw Exception('Bestand is te groot. Maximale grootte is 25MB.');
         }
-        
+
         return file;
       }
       return null;
@@ -40,7 +50,7 @@ class AttachmentService {
     final fileName = file.path.split('/').last;
     final mimeType = lookupMimeType(file.path) ?? 'application/octet-stream';
     final extension = fileName.split('.').last.toLowerCase();
-    
+
     return {
       'fileName': fileName,
       'mimeType': mimeType,
@@ -151,7 +161,8 @@ class AttachmentService {
         if (place.street != null && place.street!.isNotEmpty) {
           addressParts.add(place.street!);
         }
-        if (place.subThoroughfare != null && place.subThoroughfare!.isNotEmpty) {
+        if (place.subThoroughfare != null &&
+            place.subThoroughfare!.isNotEmpty) {
           addressParts.add(place.subThoroughfare!);
         }
         if (place.locality != null && place.locality!.isNotEmpty) {
@@ -161,7 +172,7 @@ class AttachmentService {
           addressParts.add(place.country!);
         }
 
-        return addressParts.isNotEmpty 
+        return addressParts.isNotEmpty
             ? addressParts.join(', ')
             : 'Onbekende locatie';
       }

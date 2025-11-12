@@ -28,7 +28,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     try {
       // Initialize auth service and check if user is logged in
       final isLoggedIn = await AuthService.initialize();
-      
+
       if (isLoggedIn) {
         // User is logged in, perform version check
         await _performVersionCheck();
@@ -54,26 +54,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final packageInfo = await PackageInfo.fromPlatform();
       final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
       final user = AuthService.currentUser;
-      
+
       if (user?.phoneNumber != null) {
         // Call version check API
         final versionResponse = await ApiService.checkVersion(
           appVersion,
           user!.phoneNumber,
         );
-        
+
         if (versionResponse.success) {
           if (versionResponse.reset) {
             // Reset = true: clear all data, logout, show message, go to phone input
             await StorageService.clearAllData();
             await AuthService.logout();
-            
+
             if (mounted) {
               setState(() {
                 _isAuthenticated = false;
                 _isLoading = false;
               });
-              
+
               // Show custom message if provided
               if (versionResponse.message.isNotEmpty) {
                 await showCustomMessageDialog(context, versionResponse.message);
@@ -85,7 +85,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
               _isAuthenticated = true;
               _isLoading = false;
             });
-            
+
             // Show custom message if provided
             if (mounted && versionResponse.message.isNotEmpty) {
               // Use Future.delayed to show dialog after build completes
@@ -130,9 +130,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(
-                color: Color(0xFFCC0001),
-              ),
+              CircularProgressIndicator(color: Color(0xFFCC0001)),
               SizedBox(height: 16),
               Text(
                 'kwaaijongens APP',

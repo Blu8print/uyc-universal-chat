@@ -1,11 +1,11 @@
 class User {
   final String phoneNumber;
   final String name;
-  final String companyName;  // This comes from API
-  final String webhookUrl;   // This comes from API
-  final String email;        // This comes from API
-  final String phone;        // This comes from API
-  final String website;      // This comes from API
+  final String companyName; // This comes from API
+  final String webhookUrl; // This comes from API
+  final String email; // This comes from API
+  final String phone; // This comes from API
+  final String website; // This comes from API
   final DateTime? lastLogin;
 
   User({
@@ -43,9 +43,8 @@ class User {
       email: json['email'],
       phone: json['phone'],
       website: json['website'],
-      lastLogin: json['lastLogin'] != null 
-          ? DateTime.parse(json['lastLogin']) 
-          : null,
+      lastLogin:
+          json['lastLogin'] != null ? DateTime.parse(json['lastLogin']) : null,
     );
   }
 }

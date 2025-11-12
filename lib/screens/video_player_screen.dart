@@ -5,11 +5,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final String videoUrl;
   final String? title;
 
-  const VideoPlayerScreen({
-    super.key,
-    required this.videoUrl,
-    this.title,
-  });
+  const VideoPlayerScreen({super.key, required this.videoUrl, this.title});
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -117,18 +113,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    _formatDuration(
-                                      _controller.value.position,
-                                    ),
+                                    _formatDuration(_controller.value.position),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 12,
                                     ),
                                   ),
                                   Text(
-                                    _formatDuration(
-                                      _controller.value.duration,
-                                    ),
+                                    _formatDuration(_controller.value.duration),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 12,
@@ -148,11 +140,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.error,
-                      color: Colors.red.shade400,
-                      size: 48,
-                    ),
+                    Icon(Icons.error, color: Colors.red.shade400, size: 48),
                     const SizedBox(height: 16),
                     Text(
                       'Video kan niet worden afgespeeld',
