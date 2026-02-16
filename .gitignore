@@ -51,3 +51,6 @@ android/build/
 # Firebase credentials - keep these local only
 *-firebase-adminsdk-*.json
 kwaaijongens-app-88f1d-firebase-adminsdk-fbsvc-a8cce8424e.json
+
+# Documentation folder - local reference only
+docs/
