@@ -45,9 +45,11 @@ class HelpScreen extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(Icons.menu, color: AppColors.textLight),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+          Builder(
+            builder: (context) => IconButton(
+              icon: Icon(Icons.menu, color: AppColors.textLight),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
           ),
           Expanded(
             child: Text(

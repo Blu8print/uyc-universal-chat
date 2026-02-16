@@ -235,9 +235,11 @@ class _EndpointListScreenState extends State<EndpointListScreen> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: IconButton(
-                      icon: Icon(Icons.menu, color: AppColors.textLight),
-                      onPressed: () => Scaffold.of(context).openDrawer(),
+                    child: Builder(
+                      builder: (context) => IconButton(
+                        icon: Icon(Icons.menu, color: AppColors.textLight),
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                      ),
                     ),
                   ),
                   Expanded(

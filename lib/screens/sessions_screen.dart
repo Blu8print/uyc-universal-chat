@@ -330,9 +330,11 @@ class _SessionsScreenState extends State<SessionsScreen> {
       child: Row(
         children: [
           // Menu button - opens drawer
-          IconButton(
-            icon: Icon(Icons.menu, color: AppColors.textLight),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+          Builder(
+            builder: (context) => IconButton(
+              icon: Icon(Icons.menu, color: AppColors.textLight),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
           ),
           // Title
           Expanded(
