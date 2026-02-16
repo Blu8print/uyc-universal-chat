@@ -1,49 +1,63 @@
-# Kwaaijongens APP
+# UYC - Unlock Your Cloud
 
 <div align="center">
-  <img src="logo.svg" alt="Kwaaijongens Logo" height="80">
-  
-  **The official mobile app for sharing projects, expertise, and social media content**
-  
+  <img src="UYC-logo.png" alt="UYC Logo" height="120">
+
+  **Universal cloud communication platform for seamless collaboration**
+
   [![Flutter](https://img.shields.io/badge/Flutter-3.7.1+-02569B.svg?logo=flutter)](https://flutter.dev)
   [![Dart](https://img.shields.io/badge/Dart-3.0+-0175C2.svg?logo=dart)](https://dart.dev)
-  [![Version](https://img.shields.io/badge/Version-1.0.5+10-green.svg)]()
+  [![Version](https://img.shields.io/badge/Version-1.0.6+19-blue.svg)]()
 </div>
 
-## 📱 About the App
+## 📱 About UYC
 
-Kwaaijongens APP is a mobile application that empowers professionals to easily share their projects, expertise, and social media content with our team. The app streamlines the content creation process by allowing users to submit information directly through an intuitive chat interface powered by AI assistance.
+UYC (Unlock Your Cloud) is a modern cloud communication platform built with Flutter. The app provides a seamless chat interface for cloud-based conversations, file sharing, and real-time collaboration.
 
 ### 🎯 Key Features
 
-- **📝 Project Sharing**: Share completed projects with details and insights
-- **🧠 Knowledge Sharing**: Contribute your expertise for blog creation
-- **📱 Social Media Content**: Submit photos and ideas for social media posts
-- **🤖 AI Assistant**: Get help and guidance through intelligent chat
-- **📧 Content Forwarding**: Send conversations directly to the team
-- **📂 Session Management**: Access and continue previous submissions
+- **💬 Cloud Conversations**: Intelligent chat interface for cloud-based communication
+- **📎 File Sharing**: Upload and share images, videos, documents, and audio
+- **📍 Location Sharing**: Share your location with integrated maps
+- **💾 Session Management**: Save, restore, and manage conversation sessions
 - **🔄 Real-time Sync**: Seamless synchronization across devices
+- **📱 Cross-platform**: Native experience on Android, iOS, Windows, and Web
 
-## 🚀 What You Can Do
+## 🎨 Design & Branding
 
-### Project Submission
-Share your successful projects and implementations. Our team will help create compelling case studies and portfolio content.
+- **Primary Color**: Blue-green (#1a6b8a) - Trust and innovation
+- **Accent Color**: Orange (#d98324) - Energy and warmth
+- **Text Color**: Cream (#f2e8cf) - Clarity and comfort
+- **Package Name**: `cloud.unlockyour.chat`
 
-### Knowledge Sharing
-Contribute your professional expertise and insights. We transform your knowledge into engaging blog posts and thought leadership content.
+## 🚀 Current Status
 
-### Social Media Content
-Upload photos and ideas for social media posts. Our team creates professional social media content based on your submissions.
+**Version**: 1.0.6+19 (Rebranded from Kwaaijongens APP)
 
-### AI-Powered Assistance
-Get instant help and guidance through our intelligent chat assistant that understands your content creation needs.
+⚠️ **Configuration Required**: This app requires backend configuration before production use.
+
+### What's Working
+✅ Chat UI and message display
+✅ Session management and persistence
+✅ File upload interface (images, videos, documents, audio)
+✅ Location sharing
+✅ Cross-platform builds (Android, iOS, Windows, Web)
+
+### What Needs Configuration
+⚠️ API endpoints (currently disabled via feature flag)
+⚠️ Firebase Cloud Messaging (config files need updating)
+⚠️ Backend webhook integration
+⚠️ Support contact information
+
+See `docs/FIREBASE_MIGRATION_NOTES.md` and `docs/REBRAND_COMPLETION_STATUS.md` for details.
 
 ## 📞 Support & Contact
 
-- **Phone**: [085 - 330 7500](tel:+31853307500)
-- **Email**: [app@kwaaijongens.nl](mailto:app@kwaaijongens.nl)
-- **Helpdesk**: [kwaaijongens.nl/app-support](https://kwaaijongens.nl/app-support)
-- **Privacy Policy**: [kwaaijongens.nl/privacy-app](https://kwaaijongens.nl/privacy-app)
+> ⚠️ **TODO**: Update with actual UYC support information
+
+- **Phone**: [To be configured]
+- **Email**: [To be configured]
+- **Website**: [To be configured]
 
 ---
 
@@ -51,97 +65,115 @@ Get instant help and guidance through our intelligent chat assistant that unders
 
 ### Architecture Overview
 
-The Kwaaijongens APP is built using Flutter and follows a modern mobile app architecture with the following key components:
+UYC is built using Flutter and follows a modern mobile app architecture:
 
-- **Frontend**: Flutter (Dart) with Material Design
-- **Backend Integration**: RESTful APIs with webhook architecture
-- **Authentication**: JWT-based authentication with SMS verification
+- **Frontend**: Flutter (Dart) with Material Design 3
+- **Backend Integration**: RESTful APIs with webhook architecture (requires configuration)
+- **Authentication**: Direct launch (SMS auth removed)
 - **Data Storage**: Local storage with SharedPreferences and file system
-- **Push Notifications**: Firebase Cloud Messaging (FCM)
+- **Push Notifications**: Firebase Cloud Messaging (requires setup)
 - **State Management**: Flutter setState with custom service layer
 
 ### 🏗️ Project Structure
 
 ```
 lib/
-├── models/              # Data models and DTOs
+├── config/              # Configuration files
+│   └── api_config.dart  # API endpoints (feature-flagged)
+├── constants/           # App constants
+│   ├── app_colors.dart  # Color scheme
+│   └── app_constants.dart # App identity
+├── models/              # Data models
 │   └── user_model.dart
-├── screens/             # UI screens and pages
-│   ├── auth/           # Authentication screens
+├── screens/             # UI screens
+│   ├── auth/           # Authentication screens (deprecated)
+│   ├── endpoint_list_screen.dart # Entry point
 │   ├── chat_screen.dart
 │   └── start_screen.dart
-├── services/            # Business logic and API services
+├── services/            # Business logic
 │   ├── api_service.dart
-│   ├── auth_service.dart
+│   ├── auth_service.dart (deprecated)
 │   ├── session_service.dart
 │   ├── storage_service.dart
+│   ├── attachment_service.dart
 │   └── audio_recording_service.dart
-├── widgets/             # Reusable UI components
+├── widgets/             # Reusable components
+│   ├── message_dialog.dart
+│   ├── audio_message_widget.dart
+│   ├── document_message_widget.dart
+│   └── location_message_widget.dart
 └── main.dart           # App entry point
 ```
 
 ### 🔧 Core Services
 
-#### Authentication Service
-- SMS-based verification system
-- User session management
-- Secure token handling
-
-#### Session Service  
+#### Session Service
 - Chat session lifecycle management
-- Backend synchronization
+- Backend synchronization (when configured)
 - Session persistence and restoration
+- Local storage integration
 
-#### API Service
-- Webhook integrations for content submission
-- File upload handling (images, audio, documents)
+#### API Service (Feature-Flagged)
+- Webhook integrations (commented out - requires configuration)
+- File upload handling (images, audio, documents, video)
 - Session management APIs
+- Feature flag: `ApiConfig.enableApiCalls = false` (disabled by default)
 
 #### Storage Service
 - Local message persistence
 - User data caching
 - File system management
+- Session data storage
+
+#### Attachment Service
+- Image, video, and document handling
+- File type detection and validation
+- Location/maps URL generation
+- MIME type management
 
 ### 📡 API Integration
 
-#### Webhook Endpoints
-- **Chat**: `https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat`
-- **Images**: `https://automation.kwaaijongens.nl/webhook/media_image`
-- **Videos**: `https://automation.kwaaijongens.nl/webhook/media_video` (max 200MB)
-- **Documents**: `https://automation.kwaaijongens.nl/webhook/media_document`
-- **Email**: `https://automation.kwaaijongens.nl/webhook/send-email`
-- **Send SMS**: `https://automation.kwaaijongens.nl/webhook/send-sms`
-- **Verify SMS**: `https://automation.kwaaijongens.nl/webhook/verify-sms`
-- **Version Check**: `https://automation.kwaaijongens.nl/webhook/version-check`
-- **FCM Token**: `https://automation.kwaaijongens.nl/webhook/fcm-token`
-- **Sessions**: `https://automation.kwaaijongens.nl/webhook/sessions`
+⚠️ **Configuration Required**: All API endpoints are currently commented out in `lib/config/api_config.dart`.
 
-#### Authentication
-- Basic Authentication with credentials
-- Session-based request authentication
-- Secure headers and token management
+Before enabling API calls:
+1. Configure your backend webhook URLs in `ApiConfig`
+2. Set up authentication if needed
+3. Enable the feature flag: `ApiConfig.enableApiCalls = true`
+4. Test endpoints thoroughly
 
-### 🔒 Security Features
+See `docs/REBRAND_COMPLETION_STATUS.md` for post-implementation tasks.
 
-- **Data Encryption**: Sensitive data encryption in transit and at rest
-- **Authentication**: Multi-factor authentication with SMS verification
-- **Session Management**: Secure session handling with timeout
-- **Input Validation**: Comprehensive input sanitization
-- **Privacy**: GDPR-compliant data handling
+### 🔒 Security Considerations
+
+- **Data Encryption**: Implement encryption for sensitive data in transit
+- **Authentication**: Configure authentication system as needed
+- **Session Management**: Secure session handling with appropriate timeout
+- **Input Validation**: Comprehensive input sanitization included
+- **API Security**: Configure API authentication before production
 
 ### 📱 Platform Support
 
-- **iOS**: Minimum iOS 12.0
 - **Android**: Minimum API level 21 (Android 5.0)
-- **Cross-platform**: Single codebase for both platforms
+  - Package: `cloud.unlockyour.chat`
+  - Launcher icons: ✅ Updated with UYC branding
+- **iOS**: Minimum iOS 12.0
+  - Bundle ID: `cloud.unlockyour.chat`
+  - App Store icon: ✅ Updated (other sizes: see `docs/IOS_ICONS_TODO.md`)
+- **macOS**: Minimum macOS 10.14
+  - Bundle ID: `cloud.unlockyour.chat`
+- **Windows**: Windows 10+
+  - App name: "UYC"
+  - ⚠️ Requires CMake 3.23+ for builds
+- **Web**: Modern browsers
+  - Chrome, Safari, Firefox, Edge
 
 ### 🎨 UI/UX Features
 
-- **Material Design**: Modern Material Design 3 components
+- **Material Design 3**: Modern Material Design components
+- **Custom Color Scheme**: Blue-green primary with orange accents
 - **Responsive Layout**: Adaptive layouts for different screen sizes
-- **Dark/Light Mode**: System-aware theme switching
 - **Accessibility**: Full accessibility support with screen readers
-- **Internationalization**: Dutch language support with localization framework
+- **Localization**: Dutch language support
 
 ## 🚀 Getting Started (Development)
 
@@ -149,15 +181,16 @@ lib/
 - Flutter SDK 3.7.1+
 - Dart SDK 3.0+
 - Android Studio / VS Code
-- iOS development: Xcode (macOS only)
-- Android development: Android SDK
+- **iOS development**: Xcode (macOS only)
+- **Android development**: Android SDK
+- **Windows development**: CMake 3.23+, Visual Studio 2022
 
 ### Installation
 
 1. **Clone the repository**
    ```bash
-   git clone [repository-url]
-   cd my_flutter_app
+   git clone https://github.com/Blu8print/uyc-universal-chat.git
+   cd uyc
    ```
 
 2. **Install dependencies**
@@ -165,84 +198,95 @@ lib/
    flutter pub get
    ```
 
-3. **Configure environment**
-   - Set up Firebase configuration files
-   - Configure API endpoints and credentials
-   - Set up development certificates
-
-4. **Run the app**
+3. **Run the app**
    ```bash
-   flutter run
+   # List available devices
+   flutter devices
+
+   # Run on specific device
+   flutter run -d chrome        # Web (recommended for testing)
+   flutter run -d android       # Android device/emulator
+   flutter run -d ios           # iOS device/simulator (macOS only)
+   flutter run -d windows       # Windows (requires CMake 3.23+)
    ```
 
 ### Development Commands
 
 ```bash
-# Run in debug mode
-flutter run --debug
-
-# Build for production
-flutter build apk --release
-flutter build ios --release
-
-# Run tests
-flutter test
+# Clean build files
+flutter clean
 
 # Analyze code
 flutter analyze
 
 # Format code
 dart format .
+
+# Build for production
+flutter build apk --release      # Android APK
+flutter build appbundle --release # Android App Bundle
+flutter build ios --release      # iOS (macOS only)
+flutter build web --release      # Web
 ```
 
-### 📋 Environment Setup
+### 📋 Configuration Steps
 
-#### Firebase Configuration
-1. Add `google-services.json` (Android) and `GoogleService-Info.plist` (iOS)
-2. Configure Firebase Console for FCM
-3. Set up push notification certificates
+#### 1. API Configuration
+Edit `lib/config/api_config.dart`:
+```dart
+class ApiConfig {
+  // Add your webhook URLs
+  static const String chatWebhook = 'https://your-backend.com/webhook/chat';
+  // ... add other endpoints
 
-#### API Configuration
-- Configure webhook URLs in service files
-- Set up authentication credentials
-- Configure session management endpoints
+  // Enable API calls when ready
+  static const bool enableApiCalls = true;
+}
+```
+
+#### 2. Firebase Setup (for Push Notifications)
+See `docs/FIREBASE_MIGRATION_NOTES.md` for complete guide:
+1. Create Firebase project for `cloud.unlockyour.chat`
+2. Replace `android/app/google-services.json`
+3. Replace `ios/Runner/GoogleService-Info.plist`
+4. Configure FCM in Firebase Console
+
+#### 3. Support Information
+Edit `lib/constants/app_constants.dart`:
+```dart
+class AppConstants {
+  static const String supportPhone = '+31 XX XXX XXXX';
+  static const String supportEmail = 'support@example.com';
+  static const String supportWebsite = 'https://example.com';
+}
+```
+
+#### 4. Complete iOS Icons (Optional)
+See `docs/IOS_ICONS_TODO.md` for generating remaining icon sizes.
 
 ## 📦 Dependencies
 
 ### Core Dependencies
-- **flutter**: Framework core
-- **http**: HTTP client for API requests
-- **shared_preferences**: Local data persistence
-- **path_provider**: File system access
-- **image_picker**: Camera and gallery access
-- **permission_handler**: Device permissions
-- **firebase_messaging**: Push notifications
-- **flutter_svg**: SVG asset rendering
+- **http** (1.1.0): HTTP client for API requests
+- **shared_preferences** (2.2.2): Local data persistence
+- **path_provider** (2.1.2): File system access
+- **image_picker** (1.0.7): Camera and gallery access
+- **file_picker** (8.0.0): Document picker
+- **permission_handler** (11.3.0): Device permissions
+- **record** (6.0.0): Audio recording
+- **audioplayers** (6.0.0): Audio playback
+- **video_player** (2.8.0): Video playback
+- **geolocator** (13.0.1): Location services
+- **geocoding** (3.0.0): Address lookup
+- **url_launcher** (6.2.5): Open URLs and maps
+- **firebase_messaging** (15.1.3): Push notifications
+- **flutter_svg** (2.0.10): SVG rendering
+- **connectivity_plus** (6.1.0): Network status
+- **package_info_plus** (8.0.0): App version info
 
 ### Development Dependencies
 - **flutter_test**: Testing framework
-- **build_runner**: Code generation
-- **flutter_launcher_icons**: App icon generation
-
-## 🔄 CI/CD Pipeline
-
-### Build Process
-1. **Code Analysis**: Automated code quality checks
-2. **Testing**: Unit and integration tests
-3. **Building**: Platform-specific builds
-4. **Distribution**: App store deployment
-
-### Version Management
-- **Semantic Versioning**: Following semver standards
-- **Build Numbers**: Automated increment for app stores
-- **Release Notes**: Automated changelog generation
-
-## 📊 Monitoring & Analytics
-
-- **Crash Reporting**: Integrated crash analytics
-- **Performance Monitoring**: App performance metrics
-- **User Analytics**: Privacy-compliant usage analytics
-- **Error Tracking**: Comprehensive error logging
+- **flutter_lints** (5.0.0): Linting rules
 
 ## 🤝 Contributing
 
@@ -254,34 +298,55 @@ dart format .
 
 ### Code Standards
 - Follow Dart/Flutter style guidelines
-- Maintain test coverage above 80%
+- Run `flutter analyze` before committing
+- Format code with `dart format .`
 - Document public APIs
 - Follow Material Design principles
 
 ## 📄 License
 
-This project is proprietary software owned by Kwaaijongens. All rights reserved.
+This project is proprietary software. All rights reserved.
 
 ## 📈 Changelog
 
-### Version 1.0.5+10 (Latest)
-- **UI Improvements**: Enhanced header navigation with back arrow
-- **Chat Title**: Dynamic chat titles from backend API
-- **Session Management**: Improved session deletion with webhook integration
-- **UX**: Better three dots menu styling and consistency
-- **API**: Fixed chat title API integration and error handling
+### Version 1.0.6+19 (Current - February 2026)
+- **Complete Rebrand**: Kwaaijongens APP → UYC (Unlock Your Cloud)
+- **Package Rename**: com.app.kwaaijongens → cloud.unlockyour.chat
+- **Color Scheme**: New blue-green (#1a6b8a) primary with orange (#d98324) accent
+- **Authentication**: Removed SMS auth, direct launch to endpoint screen
+- **Architecture**: Centralized API config with feature flags
+- **Assets**: New UYC launcher icons and branding across all platforms
+- **Code Quality**: 0 errors, clean flutter analyze
+- **Documentation**: Comprehensive migration guides and setup instructions
+
+### Version 1.0.5+10 (Pre-rebrand)
+- UI improvements with enhanced header navigation
+- Dynamic chat titles from backend API
+- Improved session management with webhook integration
+- Better UX with three dots menu styling
 
 ### Previous Versions
 - **1.0.4+9**: Session refresh system and sorting improvements
 - **1.0.3**: Firebase push notification integration
-- **1.0.2**: Initial app store release with core functionality
+- **1.0.2**: Initial app store release
+
+---
+
+## 📚 Additional Documentation
+
+- **Firebase Migration**: `docs/FIREBASE_MIGRATION_NOTES.md`
+- **iOS Icons Setup**: `docs/IOS_ICONS_TODO.md`
+- **Implementation Status**: `docs/REBRAND_COMPLETION_STATUS.md`
+- **Technical Details**: `docs/TECHNICAL_DOCUMENTATION.md`
+- **Session Management**: `docs/session_management.md`
+- **TestFlight Setup**: `docs/TESTFLIGHT_SETUP.md`
 
 ---
 
 <div align="center">
-  <p><strong>Kwaaijongens APP</strong> - Empowering content creation through technology</p>
+  <p><strong>UYC - Unlock Your Cloud</strong></p>
+  <p>Modern cloud communication, simplified</p>
   <p>
-    <a href="tel:+31853307500">📞 085 - 330 7500</a> • 
-    <a href="mailto:app@kwaaijongens.nl">✉️ app@kwaaijongens.nl</a>
+    <a href="https://github.com/Blu8print/uyc-universal-chat">🔗 GitHub Repository</a>
   </p>
 </div>
