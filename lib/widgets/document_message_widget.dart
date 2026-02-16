@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import '../services/attachment_service.dart';
+import '../constants/app_colors.dart';
 
 class DocumentMessageWidget extends StatelessWidget {
   final File? documentFile; // Temp file (for uploading state)
@@ -61,7 +62,7 @@ class DocumentMessageWidget extends StatelessWidget {
                 color:
                     isCustomer
                         ? Colors.white24
-                        : const Color(0xFFCC0001).withValues(alpha: 0.1),
+                        : AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(

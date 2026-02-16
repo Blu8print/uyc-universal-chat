@@ -1,3 +1,9 @@
+// ===========================================================================
+// DEPRECATED: SMS Authentication has been removed in UYC rebrand
+// This file is kept for reference only and is no longer used in the app.
+// Entry point is now EndpointListScreen (lib/screens/endpoint_list_screen.dart)
+// ===========================================================================
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';

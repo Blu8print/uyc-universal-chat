@@ -1,8 +1,15 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class ApiService {
-  // Your production URLs
+  // ===========================================================================
+  // MIGRATION NOTE: All webhook URLs have been centralized in ApiConfig
+  // Legacy Kwaaijongens URLs are commented out - see lib/config/api_config.dart
+  // ===========================================================================
+
+  // Legacy URLs (COMMENTED - now in ApiConfig)
+  /*
   static const String _sendSmsUrl =
       'https://automation.kwaaijongens.nl/webhook/send-sms';
   static const String _verifySmsUrl =
@@ -13,10 +20,18 @@ class ApiService {
       'https://automation.kwaaijongens.nl/webhook/fcm-token';
   static const String _sessionsUrl =
       'https://automation.kwaaijongens.nl/webhook/sessions';
-
-  // Authentication credentials
   static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
   static const String _sessionAuth = 'SystemArchitect:A\$pp_S3cr3t';
+  */
+
+  // Use ApiConfig for all endpoints
+  static const String _sendSmsUrl = '';
+  static const String _verifySmsUrl = '';
+  static const String _versionCheckUrl = '';
+  static const String _fcmTokenUrl = '';
+  static const String _sessionsUrl = '';
+  static const String _basicAuth = '';
+  static const String _sessionAuth = '';
 
   // Helper method to get Basic Auth header
   static String _getBasicAuthHeader() {
@@ -59,7 +74,7 @@ class ApiService {
       } else {
         return ApiResponse(
           success: false,
-          message: 'Kon SMS niet verzenden. Bel 085 - 330 7500',
+          message: 'Kon SMS niet verzenden. Neem contact op met support.',
         );
       }
     } catch (e) {
@@ -136,12 +151,12 @@ class ApiService {
       } else if (response.statusCode == 429) {
         return ApiResponse(
           success: false,
-          message: 'Te veel pogingen. Bel 085 - 330 7500',
+          message: 'Te veel pogingen. Neem contact op met support',
         );
       } else {
         return ApiResponse(
           success: false,
-          message: 'Registratie mislukt. Bel 085 - 330 7500',
+          message: 'Registratie mislukt. Neem contact op met support',
         );
       }
     } catch (e) {

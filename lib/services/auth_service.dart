@@ -1,14 +1,22 @@
+// ===========================================================================
+// DEPRECATED: SMS Authentication has been removed in UYC rebrand
+// This service is kept for backward compatibility with SessionService
+// New apps should use endpoint configuration instead of user-based auth
+// ===========================================================================
+
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import 'storage_service.dart';
 import 'api_service.dart';
+import '../config/api_config.dart';
 
 class AuthService {
   static User? _currentUser;
 
-  // Default webhook URL
-  static const String _defaultWebhookUrl =
-      'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
+  // Legacy webhook URL (COMMENTED - see ApiConfig)
+  // static const String _defaultWebhookUrl =
+  //     'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
+  static const String _defaultWebhookUrl = ''; // Disabled
 
   // Get current user
   static User? get currentUser => _currentUser;

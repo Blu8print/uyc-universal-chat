@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/attachment_service.dart';
+import '../constants/app_colors.dart';
 
 class LocationMessageWidget extends StatelessWidget {
   final double latitude;
@@ -54,12 +55,12 @@ class LocationMessageWidget extends StatelessWidget {
                   color:
                       isCustomer
                           ? Colors.white24
-                          : const Color(0xFFCC0001).withValues(alpha: 0.1),
+                          : AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   Icons.location_on,
-                  color: isCustomer ? Colors.white : const Color(0xFFCC0001),
+                  color: isCustomer ? Colors.white : AppColors.primary,
                   size: 20,
                 ),
               ),
@@ -102,7 +103,7 @@ class LocationMessageWidget extends StatelessWidget {
                 color:
                     isCustomer
                         ? Colors.white24
-                        : const Color(0xFFCC0001).withValues(alpha: 0.1),
+                        : AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
@@ -110,7 +111,7 @@ class LocationMessageWidget extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.map,
-                    color: isCustomer ? Colors.white : const Color(0xFFCC0001),
+                    color: isCustomer ? Colors.white : AppColors.primary,
                     size: 14,
                   ),
                   const SizedBox(width: 4),
@@ -118,7 +119,7 @@ class LocationMessageWidget extends StatelessWidget {
                     'Bekijk in kaarten',
                     style: TextStyle(
                       color:
-                          isCustomer ? Colors.white : const Color(0xFFCC0001),
+                          isCustomer ? Colors.white : AppColors.primary,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),

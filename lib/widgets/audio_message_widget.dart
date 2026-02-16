@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'dart:io';
+import '../constants/app_colors.dart';
 
 class AudioMessageWidget extends StatefulWidget {
   final File audioFile;
@@ -92,7 +93,7 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
             icon: Icon(
               _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
               size: 36,
-              color: widget.isCustomer ? Colors.white : const Color(0xFFCC0001),
+              color: widget.isCustomer ? Colors.white : AppColors.primary,
             ),
           ),
           Column(

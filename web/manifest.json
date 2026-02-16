@@ -1,11 +1,11 @@
 {
-    "name": "kwaaijongens APP",
-    "short_name": "kwaaijongens APP",
+    "name": "UYC",
+    "short_name": "UYC",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#000000",
     "theme_color": "#000000",
-    "description": "De Kwaaijongs APP.",
+    "description": "UYC - Unlock Your Cloud",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

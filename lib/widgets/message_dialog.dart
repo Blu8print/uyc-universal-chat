@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/app_colors.dart';
 
 Future<void> showCustomMessageDialog(
   BuildContext context,
@@ -14,7 +15,7 @@ Future<void> showCustomMessageDialog(
         title: const Text(
           'Melding',
           style: TextStyle(
-            color: Color(0xFFCC0001),
+            color: AppColors.primary,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -23,7 +24,7 @@ Future<void> showCustomMessageDialog(
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFCC0001),
+              foregroundColor: AppColors.primary,
             ),
             child: const Text(
               'OK',

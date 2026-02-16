@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'screens/auth/auth_wrapper.dart';
+import 'constants/app_colors.dart';
+import 'constants/app_constants.dart';
+import 'screens/endpoint_list_screen.dart';
 import 'services/firebase_messaging_service.dart';
 
 void main() async {
@@ -25,18 +27,18 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'kwaaijongens APP',
+      title: AppConstants.appFullName,
       theme: ThemeData(
-        primarySwatch: Colors.red,
-        primaryColor: const Color(0xFFCC0001),
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFCC0001),
+        primarySwatch: AppColors.primarySwatch,
+        primaryColor: AppColors.primary,
+        scaffoldBackgroundColor: AppColors.background,
+        appBarTheme: AppBarTheme(
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
         ),
       ),
-      home: const AuthWrapper(),
+      home: const EndpointListScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
