@@ -3,7 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'constants/app_colors.dart';
 import 'constants/app_constants.dart';
-import 'screens/endpoint_list_screen.dart';
+import 'screens/sessions_screen.dart';
 import 'services/firebase_messaging_service.dart';
 
 void main() async {
@@ -38,7 +38,7 @@ class MyApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: const EndpointListScreen(),
+      home: const SessionsScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
