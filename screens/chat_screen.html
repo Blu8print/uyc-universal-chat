@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UYC - Chat</title>
+    <style>
+        :root {
+            --bg-color: #1a6b8a; 
+            --accent-orange: #d98324;
+            --text-light: #f2e8cf;
+            --user-bubble: #d98324;
+            --bot-bubble: rgba(255, 255, 255, 0.12);
+            --input-bg: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-light);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .chat-header {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 5px;
+            margin-right: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .back-btn svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .chat-info {
+            flex: 1;
+        }
+
+        .chat-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .chat-status {
+            font-size: 0.75rem;
+            color: rgba(242, 232, 207, 0.6);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: #4ade80;
+        }
+
+        .more-btn {
+            background: none;
+            border: none;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .more-btn svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* Messages Area */
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            max-width: 80%;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.bot {
+            align-self: flex-start;
+        }
+
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 18px;
+            position: relative;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-bubble {
+            background-color: var(--user-bubble);
+            color: var(--text-light);
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.bot .message-bubble {
+            background-color: var(--bot-bubble);
+            color: var(--text-light);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-text {
+            font-size: 0.95rem;
+            line-height: 1.4;
+            margin-bottom: 4px;
+        }
+
+        .message-time {
+            font-size: 0.7rem;
+            color: rgba(242, 232, 207, 0.5);
+            text-align: right;
+        }
+
+        .message.bot .message-time {
+            color: rgba(242, 232, 207, 0.4);
+        }
+
+        /* Typing Indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 12px 16px;
+            background-color: var(--bot-bubble);
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            width: fit-content;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background-color: rgba(242, 232, 207, 0.5);
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        /* Date Separator */
+        .date-separator {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .date-label {
+            display: inline-block;
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 6px 16px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            color: rgba(242, 232, 207, 0.6);
+        }
+
+        /* Input Area */
+        .input-container {
+            padding: 15px 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        .attach-btn {
+            background: none;
+            border: none;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            transition: color 0.2s;
+        }
+
+        .attach-btn:hover {
+            color: var(--accent-orange);
+        }
+
+        .attach-btn svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .input-field {
+            flex: 1;
+            background-color: var(--input-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 12px 18px;
+            color: var(--text-light);
+            font-size: 0.95rem;
+            resize: none;
+            max-height: 120px;
+            font-family: inherit;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-orange);
+        }
+
+        .input-field::placeholder {
+            color: rgba(242, 232, 207, 0.4);
+        }
+
+        .voice-btn, .send-btn {
+            background-color: var(--accent-orange);
+            border: none;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            color: var(--text-light);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+
+        .voice-btn:hover, .send-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .voice-btn svg, .send-btn svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Attachment Menu */
+        .attachment-menu {
+            position: absolute;
+            bottom: 80px;
+            left: 30px;
+            background-color: #155268;
+            border-radius: 16px;
+            padding: 10px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .attachment-menu.active {
+            display: flex;
+        }
+
+        .attachment-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+
+        .attachment-option:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .attachment-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .attachment-icon.camera {
+            background-color: #ef4444;
+        }
+
+        .attachment-icon.gallery {
+            background-color: #8b5cf6;
+        }
+
+        .attachment-icon.document {
+            background-color: #3b82f6;
+        }
+
+        .attachment-icon.video {
+            background-color: #10b981;
+        }
+
+        .attachment-icon svg {
+            width: 20px;
+            height: 20px;
+            color: white;
+        }
+
+        .attachment-label {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-header">
+        <button class="back-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </button>
+        <div class="chat-info">
+            <div class="chat-name">Weather Bot</div>
+            <div class="chat-status">
+                <span class="status-dot"></span>
+                <span>Online â€¢ n8n</span>
+            </div>
+        </div>
+        <button class="more-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
+            </svg>
+        </button>
+    </div>
+
+    <div class="messages-container" id="messagesContainer">
+        <div class="date-separator">
+            <span class="date-label">Today</span>
+        </div>
+
+        <div class="message bot">
+            <div class="message-bubble">
+                <div class="message-text">Hello! I'm your weather assistant. How can I help you today?</div>
+                <div class="message-time">10:30 AM</div>
+            </div>
+        </div>
+
+        <div class="message user">
+            <div class="message-bubble">
+                <div class="message-text">What's the weather like in Amsterdam?</div>
+                <div class="message-time">10:32 AM</div>
+            </div>
+        </div>
+
+        <div class="message bot">
+            <div class="message-bubble">
+                <div class="message-text">Currently in Amsterdam it's 14Â°C with partly cloudy skies. There's a 60% chance of rain this afternoon. Wind is light at 12 km/h from the southwest. Would you like the extended forecast?</div>
+                <div class="message-time">10:32 AM</div>
+            </div>
+        </div>
+
+        <div class="message user">
+            <div class="message-bubble">
+                <div class="message-text">Yes please, what about tomorrow?</div>
+                <div class="message-time">10:33 AM</div>
+            </div>
+        </div>
+
+        <div class="message bot">
+            <div class="message-bubble">
+                <div class="message-text">Tomorrow in Amsterdam will be mostly sunny with a high of 16Â°C and low of 9Â°C. Perfect day for outdoor activities! â˜€ï¸</div>
+                <div class="message-time">10:33 AM</div>
+            </div>
+        </div>
+
+        <div class="message user">
+            <div class="message-bubble">
+                <div class="message-text">Great! How about this weekend?</div>
+                <div class="message-time">10:35 AM</div>
+            </div>
+        </div>
+
+        <div class="message bot typing-indicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+        </div>
+    </div>
+
+    <!-- Attachment Menu -->
+    <div class="attachment-menu" id="attachmentMenu">
+        <div class="attachment-option">
+            <div class="attachment-icon camera">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+            </div>
+            <span class="attachment-label">Camera</span>
+        </div>
+        <div class="attachment-option">
+            <div class="attachment-icon gallery">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+            </div>
+            <span class="attachment-label">Gallery</span>
+        </div>
+        <div class="attachment-option">
+            <div class="attachment-icon video">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+            </div>
+            <span class="attachment-label">Video</span>
+        </div>
+        <div class="attachment-option">
+            <div class="attachment-icon document">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                </svg>
+            </div>
+            <span class="attachment-label">Document</span>
+        </div>
+    </div>
+
+    <div class="input-container">
+        <div class="input-wrapper">
+            <button class="attach-btn" id="attachBtn">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+            </button>
+            <textarea 
+                class="input-field" 
+                id="messageInput" 
+                placeholder="Type a message..."
+                rows="1"
+            ></textarea>
+            <button class="voice-btn" id="voiceBtn">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                </svg>
+            </button>
+            <button class="send-btn" id="sendBtn" style="display: none;">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Toggle attachment menu
+        const attachBtn = document.getElementById('attachBtn');
+        const attachmentMenu = document.getElementById('attachmentMenu');
+
+        attachBtn.addEventListener('click', () => {
+            attachmentMenu.classList.toggle('active');
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!attachBtn.contains(e.target) && !attachmentMenu.contains(e.target)) {
+                attachmentMenu.classList.remove('active');
+            }
+        });
+
+        // Switch between voice and send button
+        const messageInput = document.getElementById('messageInput');
+        const voiceBtn = document.getElementById('voiceBtn');
+        const sendBtn = document.getElementById('sendBtn');
+
+        messageInput.addEventListener('input', () => {
+            if (messageInput.value.trim()) {
+                voiceBtn.style.display = 'none';
+                sendBtn.style.display = 'flex';
+            } else {
+                voiceBtn.style.display = 'flex';
+                sendBtn.style.display = 'none';
+            }
+        });
+
+        // Auto-resize textarea
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+        });
+
+        // Scroll to bottom
+        const messagesContainer = document.getElementById('messagesContainer');
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    </script>
+
+</body>
+</html>

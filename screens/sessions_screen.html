@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UYC - Sessions</title>
+    <style>
+        :root {
+            --bg-color: #1a6b8a; 
+            --accent-orange: #d98324;
+            --text-light: #f2e8cf;
+            --card-bg: rgba(255, 255, 255, 0.08);
+            --card-hover: rgba(255, 255, 255, 0.12);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-light);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .menu-btn {
+            width: 40px;
+            height: 40px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px;
+        }
+
+        .menu-btn span {
+            display: block;
+            width: 100%;
+            height: 2px;
+            background-color: var(--text-light);
+            border-radius: 2px;
+            transition: all 0.3s;
+        }
+
+        .menu-btn:hover span {
+            background-color: var(--accent-orange);
+        }
+
+        .header-title {
+            flex: 1;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .search-btn {
+            width: 40px;
+            height: 40px;
+            background: none;
+            border: none;
+            color: var(--text-light);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+
+        .search-btn:hover {
+            color: var(--accent-orange);
+        }
+
+        .search-btn svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Main Content */
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .section-title {
+            font-size: 0.85rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: rgba(242, 232, 207, 0.5);
+            margin-bottom: 15px;
+            padding-left: 5px;
+        }
+
+        /* Session Cards */
+        .session-card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+            position: relative;
+        }
+
+        .session-card:hover {
+            background-color: var(--card-hover);
+            border-color: var(--accent-orange);
+            transform: translateX(5px);
+        }
+
+        .session-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .session-info {
+            flex: 1;
+        }
+
+        .session-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-light);
+            margin-bottom: 5px;
+        }
+
+        .session-endpoint {
+            display: inline-block;
+            background-color: rgba(217, 131, 36, 0.2);
+            color: var(--accent-orange);
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+
+        .session-time {
+            font-size: 0.75rem;
+            color: rgba(242, 232, 207, 0.4);
+            white-space: nowrap;
+        }
+
+        .session-preview {
+            font-size: 0.85rem;
+            color: rgba(242, 232, 207, 0.6);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .session-meta {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 0.75rem;
+            color: rgba(242, 232, 207, 0.4);
+        }
+
+        .session-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .session-meta-item svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* Filter Tabs */
+        .filter-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+        }
+
+        .filter-tab {
+            padding: 8px 16px;
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: rgba(242, 232, 207, 0.7);
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .filter-tab:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .filter-tab.active {
+            background-color: var(--accent-orange);
+            border-color: var(--accent-orange);
+            color: var(--text-light);
+        }
+
+        /* Slide-out Menu */
+        .menu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+            z-index: 998;
+        }
+
+        .menu-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .side-menu {
+            position: fixed;
+            top: 0;
+            left: -300px;
+            width: 280px;
+            height: 100%;
+            background-color: #155268;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+            transition: left 0.3s;
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .side-menu.active {
+            left: 0;
+        }
+
+        .menu-header {
+            padding: 30px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .menu-logo {
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--text-light);
+        }
+
+        .menu-subtitle {
+            font-size: 0.75rem;
+            color: rgba(242, 232, 207, 0.5);
+            letter-spacing: 2px;
+            margin-top: 5px;
+        }
+
+        .menu-items {
+            flex: 1;
+            padding: 20px 0;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            color: var(--text-light);
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+        }
+
+        .menu-item:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-left-color: var(--accent-orange);
+        }
+
+        .menu-item svg {
+            width: 20px;
+            height: 20px;
+            margin-right: 15px;
+        }
+
+        .menu-divider {
+            height: 1px;
+            background-color: rgba(255, 255, 255, 0.1);
+            margin: 10px 20px;
+        }
+
+        .menu-footer {
+            padding: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.75rem;
+            color: rgba(242, 232, 207, 0.4);
+            text-align: center;
+        }
+
+        /* FAB for new chat */
+        .fab {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background-color: var(--accent-orange);
+            border: none;
+            border-radius: 50%;
+            color: var(--text-light);
+            font-size: 2rem;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(217, 131, 36, 0.4);
+            transition: transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .fab:hover {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Slide-out Menu -->
+    <div class="menu-overlay" id="menuOverlay"></div>
+    <div class="side-menu" id="sideMenu">
+        <div class="menu-header">
+            <div class="menu-logo">UYC</div>
+            <div class="menu-subtitle">Universal Chat</div>
+        </div>
+
+        <div class="menu-items">
+            <a class="menu-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                </svg>
+                Home
+            </a>
+
+            <a class="menu-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                </svg>
+                Sessions
+            </a>
+
+            <a class="menu-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                Endpoints
+            </a>
+
+            <div class="menu-divider"></div>
+
+            <a class="menu-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                Settings
+            </a>
+
+            <a class="menu-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Help & Support
+            </a>
+
+            <a class="menu-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                About
+            </a>
+        </div>
+
+        <div class="menu-footer">
+            UYC v1.0.0<br>
+            Â© 2024 Unlock Your Cloud
+        </div>
+    </div>
+
+    <div class="header">
+        <button class="menu-btn" id="menuBtn">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        <div class="header-title">Sessions</div>
+        <button class="search-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+        </button>
+    </div>
+
+    <div class="content">
+        <div class="filter-tabs">
+            <div class="filter-tab active">All</div>
+            <div class="filter-tab">Today</div>
+            <div class="filter-tab">This Week</div>
+            <div class="filter-tab">Archived</div>
+        </div>
+
+        <div class="section-title">Recent Conversations</div>
+
+        <div class="session-card">
+            <div class="session-header">
+                <div class="session-info">
+                    <div class="session-title">Weather Updates for Amsterdam</div>
+                    <span class="session-endpoint">Weather Bot</span>
+                </div>
+                <div class="session-time">2m ago</div>
+            </div>
+            <div class="session-preview">
+                It's currently 14Â°C and partly cloudy in Amsterdam. There's a 60% chance of rain this afternoon...
+            </div>
+            <div class="session-meta">
+                <div class="session-meta-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    8 messages
+                </div>
+            </div>
+        </div>
+
+        <div class="session-card">
+            <div class="session-header">
+                <div class="session-info">
+                    <div class="session-title">Order Status Check</div>
+                    <span class="session-endpoint">Customer Support AI</span>
+                </div>
+                <div class="session-time">1h ago</div>
+            </div>
+            <div class="session-preview">
+                Your order #45789 has been shipped and will arrive tomorrow between 10-12 AM...
+            </div>
+            <div class="session-meta">
+                <div class="session-meta-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    12 messages
+                </div>
+            </div>
+        </div>
+
+        <div class="session-card">
+            <div class="session-header">
+                <div class="session-info">
+                    <div class="session-title">Turn on Living Room Lights</div>
+                    <span class="session-endpoint">Home Automation</span>
+                </div>
+                <div class="session-time">3h ago</div>
+            </div>
+            <div class="session-preview">
+                Done! I've set the living room lights to 80% brightness with warm white color...
+            </div>
+            <div class="session-meta">
+                <div class="session-meta-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    4 messages
+                </div>
+            </div>
+        </div>
+
+        <div class="section-title" style="margin-top: 30px;">Yesterday</div>
+
+        <div class="session-card">
+            <div class="session-header">
+                <div class="session-info">
+                    <div class="session-title">Invoice Processing Help</div>
+                    <span class="session-endpoint">Customer Support AI</span>
+                </div>
+                <div class="session-time">Yesterday</div>
+            </div>
+            <div class="session-preview">
+                I can help you with that. To process the invoice, please upload it and I'll extract...
+            </div>
+            <div class="session-meta">
+                <div class="session-meta-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    23 messages
+                </div>
+            </div>
+        </div>
+
+        <div class="session-card">
+            <div class="session-header">
+                <div class="session-info">
+                    <div class="session-title">Weekend Forecast</div>
+                    <span class="session-endpoint">Weather Bot</span>
+                </div>
+                <div class="session-time">Yesterday</div>
+            </div>
+            <div class="session-preview">
+                This weekend looks great! Saturday will be sunny with highs of 18Â°C, perfect for...
+            </div>
+            <div class="session-meta">
+                <div class="session-meta-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    6 messages
+                </div>
+            </div>
+        </div>
+
+        <div class="session-card">
+            <div class="session-header">
+                <div class="session-info">
+                    <div class="session-title">Create Shopping List</div>
+                    <span class="session-endpoint">Task Manager Bot</span>
+                </div>
+                <div class="session-time">Yesterday</div>
+            </div>
+            <div class="session-preview">
+                I've created a shopping list with: Milk, Eggs, Bread, Tomatoes, Cheese. Would you like...
+            </div>
+            <div class="session-meta">
+                <div class="session-meta-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    15 messages
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Action Button -->
+    <button class="fab">+</button>
+
+    <script>
+        // Menu functionality
+        const menuBtn = document.getElementById('menuBtn');
+        const menuOverlay = document.getElementById('menuOverlay');
+        const sideMenu = document.getElementById('sideMenu');
+
+        function toggleMenu() {
+            menuOverlay.classList.toggle('active');
+            sideMenu.classList.toggle('active');
+        }
+
+        menuBtn.addEventListener('click', toggleMenu);
+        menuOverlay.addEventListener('click', toggleMenu);
+
+        // Filter tabs
+        const filterTabs = document.querySelectorAll('.filter-tab');
+        filterTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                filterTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+            });
+        });
+    </script>
+
+</body>
+</html>

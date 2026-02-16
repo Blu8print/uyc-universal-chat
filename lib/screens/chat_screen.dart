@@ -11,6 +11,7 @@ import '../services/storage_service.dart';
 import '../services/attachment_service.dart';
 import '../services/firebase_messaging_service.dart';
 import '../services/api_service.dart';
+import '../constants/app_colors.dart';
 import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
 import 'image_viewer_screen.dart';
@@ -3180,8 +3181,8 @@ class _ChatScreenState extends State<ChatScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFF0F0F0), width: 1)),
+        color: Color(0x1A000000), // 10% black overlay
+        border: Border(bottom: BorderSide(color: Color(0x1AFFFFFF), width: 1)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3193,9 +3194,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 MaterialPageRoute(builder: (context) => const StartScreen()),
               );
             },
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_ios,
-              color: Color(0xFF374151),
+              color: AppColors.textLight,
               size: 24,
             ),
             padding: const EdgeInsets.all(8.0),
@@ -3206,10 +3207,10 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Text(
                 _chatTitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151),
+                  color: AppColors.textLight,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -3226,8 +3227,8 @@ class _ChatScreenState extends State<ChatScreen> {
               _audioEnabled ? Icons.volume_up : Icons.volume_off,
               color:
                   _audioEnabled
-                      ? const Color(0xFFCC0001)
-                      : const Color(0xFF6B7280),
+                      ? AppColors.accent
+                      : AppColors.textLight.withValues(alpha: 0.6),
               size: 24,
             ),
             padding: const EdgeInsets.all(8.0),
@@ -3236,12 +3237,12 @@ class _ChatScreenState extends State<ChatScreen> {
             onSelected: _handleMenuSelection,
             icon: Container(
               padding: const EdgeInsets.all(8.0),
-              child: const Text(
+              child: Text(
                 '⋮',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF374151),
+                  color: AppColors.textLight,
                   height: 1.0,
                 ),
               ),
@@ -3529,6 +3530,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final homeIndicatorHeight = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
+      backgroundColor: AppColors.primary,
       resizeToAvoidBottomInset: false,
       body: Padding(
         padding: EdgeInsets.only(bottom: keyboardHeight),
@@ -3621,15 +3623,16 @@ class _ChatScreenState extends State<ChatScreen> {
                 bottom: 16 + homeIndicatorHeight,
               ),
               decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: Colors.grey, width: 0.5)),
+                color: Color(0x1A000000), // 10% black overlay
+                border: Border(top: BorderSide(color: Color(0x1AFFFFFF), width: 1)),
               ),
               child: Row(
                 children: [
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
+                        color: const Color(0x1AFFFFFF), // 10% white background
+                        border: Border.all(color: const Color(0x1AFFFFFF)),
                         borderRadius: BorderRadius.circular(24),
                       ),
                       child: Row(
@@ -3642,8 +3645,8 @@ class _ChatScreenState extends State<ChatScreen> {
                               Icons.attach_file,
                               color:
                                   _isLoading
-                                      ? Colors.grey.shade400
-                                      : Colors.grey,
+                                      ? AppColors.textLight.withValues(alpha: 0.3)
+                                      : AppColors.textLight.withValues(alpha: 0.7),
                               size: 20,
                             ),
                           ),
@@ -3661,11 +3664,15 @@ class _ChatScreenState extends State<ChatScreen> {
                                 onChanged: _onTextChanged,
                                 onTap: _onTextFieldTapped,
                                 enabled: !_isLoading,
+                                style: TextStyle(color: AppColors.textLight),
                                 decoration: InputDecoration(
                                   hintText:
                                       _isLoading
                                           ? 'Even geduld...'
                                           : 'Deel je blog idee...',
+                                  hintStyle: TextStyle(
+                                    color: AppColors.textLight.withValues(alpha: 0.4),
+                                  ),
                                   border: InputBorder.none,
                                   contentPadding: const EdgeInsets.symmetric(
                                     vertical: 12,
@@ -3685,8 +3692,8 @@ class _ChatScreenState extends State<ChatScreen> {
                               Icons.camera_alt,
                               color:
                                   _isLoading
-                                      ? Colors.grey.shade400
-                                      : Colors.grey,
+                                      ? AppColors.textLight.withValues(alpha: 0.3)
+                                      : AppColors.textLight.withValues(alpha: 0.7),
                               size: 20,
                             ),
                           ),
@@ -3700,10 +3707,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     decoration: BoxDecoration(
                       color:
                           _isLoading
-                              ? Colors.grey
+                              ? AppColors.accent.withValues(alpha: 0.5)
                               : (_isRecording
                                   ? Colors.red
-                                  : const Color(0xFFCC0001)),
+                                  : AppColors.accent),
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
@@ -3953,8 +3960,8 @@ class ChatBubble extends StatelessWidget {
                 : MainAxisAlignment.start,
         children: [
           if (!message.isCustomer) ...[
-            const CircleAvatar(
-              backgroundColor: Color(0xFFCC0001),
+            CircleAvatar(
+              backgroundColor: AppColors.accent,
               radius: 16,
               child: Icon(Icons.smart_toy, color: Colors.white, size: 18),
             ),
@@ -3971,9 +3978,13 @@ class ChatBubble extends StatelessWidget {
                   decoration: BoxDecoration(
                     color:
                         message.isCustomer
-                            ? const Color(0xFFCC0001)
-                            : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(18),
+                            ? AppColors.accent // Orange for user messages
+                            : const Color(0x1FFFFFFF), // 12% white for bot messages
+                    borderRadius: BorderRadius.circular(18).copyWith(
+                      // Speech bubble tail
+                      bottomRight: message.isCustomer ? const Radius.circular(4) : null,
+                      bottomLeft: !message.isCustomer ? const Radius.circular(4) : null,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -4014,10 +4025,7 @@ class ChatBubble extends StatelessWidget {
                             Text(
                               _formatTime(message.timestamp),
                               style: TextStyle(
-                                color:
-                                    message.isCustomer
-                                        ? Colors.white70
-                                        : Colors.grey.shade600,
+                                color: AppColors.textLight.withValues(alpha: 0.5),
                                 fontSize: 12,
                               ),
                             ),
@@ -4064,10 +4072,7 @@ class ChatBubble extends StatelessWidget {
                             Text(
                               _formatTime(message.timestamp),
                               style: TextStyle(
-                                color:
-                                    message.isCustomer
-                                        ? Colors.white70
-                                        : Colors.grey.shade600,
+                                color: AppColors.textLight.withValues(alpha: 0.5),
                                 fontSize: 12,
                               ),
                             ),
@@ -4099,10 +4104,7 @@ class ChatBubble extends StatelessWidget {
                             Text(
                               _formatTime(message.timestamp),
                               style: TextStyle(
-                                color:
-                                    message.isCustomer
-                                        ? Colors.white70
-                                        : Colors.grey.shade600,
+                                color: AppColors.textLight.withValues(alpha: 0.5),
                                 fontSize: 12,
                               ),
                             ),
@@ -4115,10 +4117,7 @@ class ChatBubble extends StatelessWidget {
                             LinkableSelectableText(
                               text: message.text,
                               style: TextStyle(
-                                color:
-                                    message.isCustomer
-                                        ? Colors.white
-                                        : Colors.black87,
+                                color: AppColors.textLight,
                                 fontSize: 16,
                               ),
                             ),
@@ -4126,10 +4125,7 @@ class ChatBubble extends StatelessWidget {
                             Text(
                               _formatTime(message.timestamp),
                               style: TextStyle(
-                                color:
-                                    message.isCustomer
-                                        ? Colors.white70
-                                        : Colors.grey.shade600,
+                                color: AppColors.textLight.withValues(alpha: 0.5),
                                 fontSize: 12,
                               ),
                             ),
@@ -4147,7 +4143,7 @@ class ChatBubble extends StatelessWidget {
                     child: Icon(
                       Icons.access_time,
                       size: 14,
-                      color: Colors.white70,
+                      color: AppColors.textLight.withValues(alpha: 0.7),
                     ),
                   ),
               ],
@@ -4206,8 +4202,8 @@ class _TypingIndicatorState extends State<TypingIndicator>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          const CircleAvatar(
-            backgroundColor: Color(0xFFCC0001),
+          CircleAvatar(
+            backgroundColor: AppColors.accent,
             radius: 16,
             child: Icon(Icons.smart_toy, color: Colors.white, size: 18),
           ),
@@ -4215,15 +4211,17 @@ class _TypingIndicatorState extends State<TypingIndicator>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(18),
+              color: const Color(0x1FFFFFFF), // 12% white
+              borderRadius: BorderRadius.circular(18).copyWith(
+                bottomLeft: const Radius.circular(4), // Speech bubble tail
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   widget.isUploadingFile ? 'Bestand uploaden' : 'Aan het typen',
-                  style: const TextStyle(color: Colors.black87, fontSize: 16),
+                  style: TextStyle(color: AppColors.textLight, fontSize: 16),
                 ),
                 const SizedBox(width: 8),
                 AnimatedBuilder(
@@ -4243,11 +4241,11 @@ class _TypingIndicatorState extends State<TypingIndicator>
                           padding: const EdgeInsets.symmetric(horizontal: 1),
                           child: Opacity(
                             opacity: opacity,
-                            child: const Text(
+                            child: Text(
                               '•',
                               style: TextStyle(
                                 fontSize: 20,
-                                color: Color(0xFFCC0001),
+                                color: AppColors.textLight.withValues(alpha: 0.5),
                               ),
                             ),
                           ),
