@@ -20,6 +20,11 @@ class Endpoint {
   final String videoAction;
   final String documentAction;
   final String audioAction;
+  final bool mediaUseSameEndpoint;
+  final bool imageEnabled;
+  final bool videoEnabled;
+  final bool documentEnabled;
+  final bool audioEnabled;
 
   Endpoint({
     required this.id,
@@ -41,7 +46,15 @@ class Endpoint {
     this.videoAction = 'sendVideo',
     this.documentAction = 'sendDocument',
     this.audioAction = 'sendAudio',
+    this.mediaUseSameEndpoint = true,
+    this.imageEnabled = true,
+    this.videoEnabled = true,
+    this.documentEnabled = true,
+    this.audioEnabled = true,
   }) : createdAt = createdAt ?? DateTime.now();
+
+  String get effectiveMediaUrl =>
+      mediaUseSameEndpoint ? url : (mediaUrl ?? url);
 
   // JSON serialization methods
   Map<String, dynamic> toJson() {
@@ -65,6 +78,11 @@ class Endpoint {
       'videoAction': videoAction,
       'documentAction': documentAction,
       'audioAction': audioAction,
+      'mediaUseSameEndpoint': mediaUseSameEndpoint,
+      'imageEnabled': imageEnabled,
+      'videoEnabled': videoEnabled,
+      'documentEnabled': documentEnabled,
+      'audioEnabled': audioEnabled,
     };
   }
 
@@ -89,6 +107,11 @@ class Endpoint {
       videoAction: json['videoAction'] as String? ?? 'sendVideo',
       documentAction: json['documentAction'] as String? ?? 'sendDocument',
       audioAction: json['audioAction'] as String? ?? 'sendAudio',
+      mediaUseSameEndpoint: json['mediaUseSameEndpoint'] as bool? ?? true,
+      imageEnabled: json['imageEnabled'] as bool? ?? true,
+      videoEnabled: json['videoEnabled'] as bool? ?? true,
+      documentEnabled: json['documentEnabled'] as bool? ?? true,
+      audioEnabled: json['audioEnabled'] as bool? ?? true,
     );
   }
 
@@ -154,6 +177,11 @@ class Endpoint {
     String? videoAction,
     String? documentAction,
     String? audioAction,
+    bool? mediaUseSameEndpoint,
+    bool? imageEnabled,
+    bool? videoEnabled,
+    bool? documentEnabled,
+    bool? audioEnabled,
   }) {
     return Endpoint(
       id: id ?? this.id,
@@ -175,6 +203,11 @@ class Endpoint {
       videoAction: videoAction ?? this.videoAction,
       documentAction: documentAction ?? this.documentAction,
       audioAction: audioAction ?? this.audioAction,
+      mediaUseSameEndpoint: mediaUseSameEndpoint ?? this.mediaUseSameEndpoint,
+      imageEnabled: imageEnabled ?? this.imageEnabled,
+      videoEnabled: videoEnabled ?? this.videoEnabled,
+      documentEnabled: documentEnabled ?? this.documentEnabled,
+      audioEnabled: audioEnabled ?? this.audioEnabled,
     );
   }
 }

@@ -42,6 +42,11 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen>
   late TextEditingController _documentActionController;
   late TextEditingController _audioActionController;
   String _mediaAuthType = 'none';
+  bool _mediaUseSameEndpoint = true;
+  bool _imageEnabled = true;
+  bool _videoEnabled = true;
+  bool _documentEnabled = true;
+  bool _audioEnabled = true;
 
   @override
   void initState() {
@@ -54,6 +59,11 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen>
     _documentActionController = TextEditingController(text: widget.endpoint?.documentAction ?? 'sendDocument');
     _audioActionController = TextEditingController(text: widget.endpoint?.audioAction ?? 'sendAudio');
     _mediaAuthType = widget.endpoint?.mediaAuthType ?? 'none';
+    _mediaUseSameEndpoint = widget.endpoint?.mediaUseSameEndpoint ?? true;
+    _imageEnabled = widget.endpoint?.imageEnabled ?? true;
+    _videoEnabled = widget.endpoint?.videoEnabled ?? true;
+    _documentEnabled = widget.endpoint?.documentEnabled ?? true;
+    _audioEnabled = widget.endpoint?.audioEnabled ?? true;
     _tabController = TabController(length: 2, vsync: this);
     if (widget.endpoint != null) {
       _loadEndpoint(widget.endpoint!);
@@ -180,6 +190,11 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen>
       videoAction: _videoActionController.text.isEmpty ? 'sendVideo' : _videoActionController.text,
       documentAction: _documentActionController.text.isEmpty ? 'sendDocument' : _documentActionController.text,
       audioAction: _audioActionController.text.isEmpty ? 'sendAudio' : _audioActionController.text,
+      mediaUseSameEndpoint: _mediaUseSameEndpoint,
+      imageEnabled: _imageEnabled,
+      videoEnabled: _videoEnabled,
+      documentEnabled: _documentEnabled,
+      audioEnabled: _audioEnabled,
     );
 
     bool success;
@@ -458,119 +473,137 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen>
   }
 
   Widget _buildMediaTab() {
-    final hasMediaUrl = _mediaUrlController.text.isNotEmpty;
-    return StatefulBuilder(
-      builder: (context, setInnerState) {
-        return ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            _buildSectionTitle('MEDIA URL', Icons.perm_media),
-            const SizedBox(height: 14),
-            _buildTextField(
-              controller: _mediaUrlController,
-              label: 'Media Webhook URL (optional)',
-              hint: 'https://your-n8n.com/webhook/xxxxx/media',
-              mono: true,
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 8),
-            if (!hasMediaUrl)
-              Text(
-                'Attachments disabled — add a Media URL to enable.',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: AppColors.textLight.withValues(alpha: 0.4),
-                ),
-              )
-            else
-              Text(
-                'Separate endpoint for sending images, video, documents, and audio',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: AppColors.textLight.withValues(alpha: 0.4),
-                ),
-              ),
-            if (hasMediaUrl) ...[
-              const SizedBox(height: 28),
-              _buildSectionTitle('AUTHENTICATION', Icons.lock),
-              const SizedBox(height: 14),
-              _buildDropdown(
-                label: 'Auth Type',
-                value: _mediaAuthType,
-                items: const [
-                  {'value': 'none', 'label': 'None (Public endpoint)'},
-                  {'value': 'basic', 'label': 'Basic Auth'},
-                  {'value': 'bearer', 'label': 'Bearer Token'},
-                  {'value': 'header', 'label': 'Custom Header'},
-                ],
-                onChanged: (v) => setState(() => _mediaAuthType = v!),
-              ),
-              const SizedBox(height: 16),
-              if (_mediaAuthType == 'basic') ...[
-                _buildTextField(
-                  controller: _mediaUsernameController,
-                  label: 'Username',
-                  hint: 'user',
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _mediaAuthValueController,
-                  label: 'Password',
-                  hint: '••••••••',
-                  obscure: true,
-                ),
-              ],
-              if (_mediaAuthType == 'bearer')
-                _buildTextField(
-                  controller: _mediaAuthValueController,
-                  label: 'Bearer Token',
-                  hint: 'your-token-here',
-                  mono: true,
-                ),
-              if (_mediaAuthType == 'header')
-                _buildTextField(
-                  controller: _mediaAuthValueController,
-                  label: 'Custom Header',
-                  hint: 'X-API-Key: your-key-here',
-                  mono: true,
-                ),
-              const SizedBox(height: 28),
-              _buildSectionTitle('ACTION NAMES', Icons.code),
-              const SizedBox(height: 14),
-              _buildTextField(
-                controller: _imageActionController,
-                label: 'Image Action',
-                hint: 'sendImage',
-                mono: true,
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: _videoActionController,
-                label: 'Video Action',
-                hint: 'sendVideo',
-                mono: true,
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: _documentActionController,
-                label: 'Document Action',
-                hint: 'sendDocument',
-                mono: true,
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: _audioActionController,
-                label: 'Audio Action',
-                hint: 'sendAudio',
-                mono: true,
-              ),
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        _buildSectionTitle('ENDPOINT', Icons.link),
+        const SizedBox(height: 14),
+        _buildToggle(
+          label: 'Use same endpoint as chat',
+          description: 'Use the chat URL and authentication for media',
+          value: _mediaUseSameEndpoint,
+          onChanged: (v) => setState(() => _mediaUseSameEndpoint = v),
+        ),
+        if (!_mediaUseSameEndpoint) ...[
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: _mediaUrlController,
+            label: 'Media Webhook URL',
+            hint: 'https://your-n8n.com/webhook/xxxxx/media',
+            mono: true,
+          ),
+          const SizedBox(height: 28),
+          _buildSectionTitle('AUTHENTICATION', Icons.lock),
+          const SizedBox(height: 14),
+          _buildDropdown(
+            label: 'Auth Type',
+            value: _mediaAuthType,
+            items: const [
+              {'value': 'none', 'label': 'None (Public endpoint)'},
+              {'value': 'basic', 'label': 'Basic Auth'},
+              {'value': 'bearer', 'label': 'Bearer Token'},
+              {'value': 'header', 'label': 'Custom Header'},
             ],
-            const SizedBox(height: 20),
+            onChanged: (v) => setState(() => _mediaAuthType = v!),
+          ),
+          const SizedBox(height: 16),
+          if (_mediaAuthType == 'basic') ...[
+            _buildTextField(
+              controller: _mediaUsernameController,
+              label: 'Username',
+              hint: 'user',
+            ),
+            const SizedBox(height: 16),
+            _buildTextField(
+              controller: _mediaAuthValueController,
+              label: 'Password',
+              hint: '••••••••',
+              obscure: true,
+            ),
           ],
-        );
-      },
+          if (_mediaAuthType == 'bearer')
+            _buildTextField(
+              controller: _mediaAuthValueController,
+              label: 'Bearer Token',
+              hint: 'your-token-here',
+              mono: true,
+            ),
+          if (_mediaAuthType == 'header')
+            _buildTextField(
+              controller: _mediaAuthValueController,
+              label: 'Custom Header',
+              hint: 'X-API-Key: your-key-here',
+              mono: true,
+            ),
+        ],
+        const SizedBox(height: 28),
+        _buildSectionTitle('MEDIA TYPES', Icons.perm_media),
+        const SizedBox(height: 14),
+        _buildToggle(
+          label: 'Image',
+          description: 'Enable image attachments',
+          value: _imageEnabled,
+          onChanged: (v) => setState(() => _imageEnabled = v),
+        ),
+        if (_imageEnabled) ...[
+          const SizedBox(height: 12),
+          _buildTextField(
+            controller: _imageActionController,
+            label: 'Action Name',
+            hint: 'sendImage',
+            mono: true,
+          ),
+        ],
+        const SizedBox(height: 16),
+        _buildToggle(
+          label: 'Video',
+          description: 'Enable video attachments',
+          value: _videoEnabled,
+          onChanged: (v) => setState(() => _videoEnabled = v),
+        ),
+        if (_videoEnabled) ...[
+          const SizedBox(height: 12),
+          _buildTextField(
+            controller: _videoActionController,
+            label: 'Action Name',
+            hint: 'sendVideo',
+            mono: true,
+          ),
+        ],
+        const SizedBox(height: 16),
+        _buildToggle(
+          label: 'Document',
+          description: 'Enable document attachments',
+          value: _documentEnabled,
+          onChanged: (v) => setState(() => _documentEnabled = v),
+        ),
+        if (_documentEnabled) ...[
+          const SizedBox(height: 12),
+          _buildTextField(
+            controller: _documentActionController,
+            label: 'Action Name',
+            hint: 'sendDocument',
+            mono: true,
+          ),
+        ],
+        const SizedBox(height: 16),
+        _buildToggle(
+          label: 'Audio',
+          description: 'Enable audio attachments',
+          value: _audioEnabled,
+          onChanged: (v) => setState(() => _audioEnabled = v),
+        ),
+        if (_audioEnabled) ...[
+          const SizedBox(height: 12),
+          _buildTextField(
+            controller: _audioActionController,
+            label: 'Action Name',
+            hint: 'sendAudio',
+            mono: true,
+          ),
+        ],
+        const SizedBox(height: 20),
+      ],
     );
   }
 

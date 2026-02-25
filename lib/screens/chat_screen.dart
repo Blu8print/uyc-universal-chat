@@ -53,10 +53,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isEmailSending = false;
   bool _isDeletingSession = false;
   Duration _recordingDuration = Duration.zero;
-  bool _showSendToTeamBanner = false;
-  bool _bannerAvailable = false;
   bool _userTypedAfterEmailSent = false;
-  Timer? _bannerTimer;
   String _chatTitle = 'Chat';
   String? _chatType;
   bool _audioEnabled = false;
@@ -78,13 +75,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Apply media auth headers to a multipart request
   void _applyMediaAuth(http.MultipartRequest request) {
-    final authHeader = _getMediaAuthHeader();
+    final useSame = _endpoint?.mediaUseSameEndpoint ?? true;
+    final authHeader = useSame ? _getAuthHeader() : _getMediaAuthHeader();
+    final authType = useSame ? _endpoint?.authType : _endpoint?.mediaAuthType;
     if (authHeader != null) {
-      if (_endpoint?.mediaAuthType == 'header') {
+      if (authType == 'header') {
         final parts = authHeader.split(':');
-        if (parts.length == 2) {
-          request.headers[parts[0].trim()] = parts[1].trim();
-        }
+        if (parts.length == 2) request.headers[parts[0].trim()] = parts[1].trim();
       } else {
         request.headers['Authorization'] = authHeader;
       }
@@ -370,12 +367,9 @@ class _ChatScreenState extends State<ChatScreen> {
     return true;
   }
 
-  // Detect and strip {show_banner} tag from AI response text
-  // Returns cleaned text and flag indicating if banner should be shown
-  Map<String, dynamic> _detectAndStripBannerTag(String text) {
-    final hasBannerTag = text.contains('{show_banner}');
-    final cleanText = text.replaceAll('{show_banner}', '').trim();
-    return {'text': cleanText, 'shouldShowBanner': hasBannerTag};
+  // Strip {show_banner} tag from AI response text
+  String _stripBannerTag(String text) {
+    return text.replaceAll('{show_banner}', '').trim();
   }
 
   // Convert ChatMessage to server-friendly format for webhook
@@ -433,13 +427,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (sessionId != null &&
           sessionId == SessionService.currentSessionId &&
           messageText != null) {
-        // Detect and strip banner tag
-        final result = _detectAndStripBannerTag(messageText);
-        final cleanText = result['text'];
-        final shouldShowBanner = result['shouldShowBanner'];
-
         final fcmMessage = ChatMessage(
-          text: cleanText,
+          text: _stripBannerTag(messageText),
           isCustomer: false, // FCM messages are from the bot/system
           timestamp: DateTime.now(),
           status: MessageStatus.sent,
@@ -448,11 +437,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
         _addMessage(fcmMessage);
         _scrollToBottom();
-
-        // Show banner if tag was detected
-        if (shouldShowBanner) {
-          _displaySendToTeamBanner();
-        }
       }
     } catch (e) {
       debugPrint('Error handling FCM message: $e');
@@ -467,7 +451,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _audioPlayer?.dispose();
     _recordingTimer?.cancel();
     // DISABLED: Banner timer cleanup
-    // _bannerTimer?.cancel();
     super.dispose();
   }
 
@@ -484,11 +467,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendMessage() async {
-    // Disable banner availability when user sends a message
-    setState(() {
-      _bannerAvailable = false;
-      _showSendToTeamBanner = false;
-    });
 
     if (_messageController.text.trim().isNotEmpty && !_isLoading) {
       final userMessage = _messageController.text.trim();
@@ -591,10 +569,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _startRecording() async {
-    // Hide banner temporarily during recording
-    setState(() {
-      _showSendToTeamBanner = false;
-    });
 
     debugPrint('DEBUG: Starting recording...');
     final hasPermission = await _audioService.requestPermission();
@@ -652,21 +626,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (audioFile != null) {
       await _sendAudioMessage(audioFile);
-    } else {
-      // Recording cancelled - show banner again if available and text field empty
-      setState(() {
-        _showSendToTeamBanner =
-            _bannerAvailable && _messageController.text.trim().isEmpty;
-      });
     }
   }
 
   Future<void> _sendAudioMessage(File audioFile) async {
-    // Disable banner availability when sending audio
-    setState(() {
-      _bannerAvailable = false;
-      _showSendToTeamBanner = false;
-    });
 
     // Create new audio message with pending status
     final newMessage = ChatMessage(
@@ -777,30 +740,32 @@ class _ChatScreenState extends State<ChatScreen> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(
-                  Icons.description,
-                  color: Color(0xFFCC0001),
+              if (_endpoint?.documentEnabled != false)
+                ListTile(
+                  leading: const Icon(
+                    Icons.description,
+                    color: Color(0xFFCC0001),
+                  ),
+                  title: const Text('Document'),
+                  subtitle: const Text('PDF, Word, Excel, PowerPoint, ODT'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickDocument();
+                  },
                 ),
-                title: const Text('Document'),
-                subtitle: const Text('PDF, Word, Excel, PowerPoint, ODT'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickDocument();
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.photo_library,
-                  color: Color(0xFFCC0001),
+              if (_endpoint?.imageEnabled != false)
+                ListTile(
+                  leading: const Icon(
+                    Icons.photo_library,
+                    color: Color(0xFFCC0001),
+                  ),
+                  title: const Text('Galerij'),
+                  subtitle: const Text('Meerdere foto\'s en afbeeldingen'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickMultipleImages();
+                  },
                 ),
-                title: const Text('Galerij'),
-                subtitle: const Text('Meerdere foto\'s en afbeeldingen'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickMultipleImages();
-                },
-              ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -827,44 +792,48 @@ class _ChatScreenState extends State<ChatScreen> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.camera_alt, color: Color(0xFFCC0001)),
-                title: const Text('Foto maken'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.videocam, color: Color(0xFFCC0001)),
-                title: const Text('Video opnemen'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickVideo(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.photo_library,
-                  color: Color(0xFFCC0001),
+              if (_endpoint?.imageEnabled != false)
+                ListTile(
+                  leading: const Icon(Icons.camera_alt, color: Color(0xFFCC0001)),
+                  title: const Text('Foto maken'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.camera);
+                  },
                 ),
-                title: const Text('Foto kiezen'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.video_library,
-                  color: Color(0xFFCC0001),
+              if (_endpoint?.videoEnabled != false)
+                ListTile(
+                  leading: const Icon(Icons.videocam, color: Color(0xFFCC0001)),
+                  title: const Text('Video opnemen'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickVideo(ImageSource.camera);
+                  },
                 ),
-                title: const Text('Video kiezen'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickVideo(ImageSource.gallery);
-                },
-              ),
+              if (_endpoint?.imageEnabled != false)
+                ListTile(
+                  leading: const Icon(
+                    Icons.photo_library,
+                    color: Color(0xFFCC0001),
+                  ),
+                  title: const Text('Foto kiezen'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+              if (_endpoint?.videoEnabled != false)
+                ListTile(
+                  leading: const Icon(
+                    Icons.video_library,
+                    color: Color(0xFFCC0001),
+                  ),
+                  title: const Text('Video kiezen'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickVideo(ImageSource.gallery);
+                  },
+                ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -878,10 +847,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    // Hide banner temporarily during image picking
-    setState(() {
-      _showSendToTeamBanner = false;
-    });
 
     try {
       // Request permissions
@@ -923,20 +888,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (image != null) {
         final imageFile = File(image.path);
         await _sendImageMessage(imageFile);
-      } else {
-        // Image picking cancelled - show banner again if available and text field empty
-        setState(() {
-          _showSendToTeamBanner =
-              _bannerAvailable && _messageController.text.trim().isEmpty;
-        });
       }
     } catch (e) {
-      // Error occurred - show banner again if available and text field empty
-      setState(() {
-        _showSendToTeamBanner =
-            _bannerAvailable && _messageController.text.trim().isEmpty;
-      });
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Fout bij het selecteren van afbeelding: $e')),
@@ -946,11 +899,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickVideo(ImageSource source) async {
-    // Hide banner temporarily during video picking
-    setState(() {
-      _showSendToTeamBanner = false;
-    });
-
     try {
       // Request permissions
       if (source == ImageSource.camera) {
@@ -991,20 +939,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (video != null) {
         final videoFile = File(video.path);
         await _sendVideoMessage(videoFile);
-      } else {
-        // Video picking cancelled - show banner again if available and text field empty
-        setState(() {
-          _showSendToTeamBanner =
-              _bannerAvailable && _messageController.text.trim().isEmpty;
-        });
       }
     } catch (e) {
-      // Error occurred - show banner again if available and text field empty
-      setState(() {
-        _showSendToTeamBanner =
-            _bannerAvailable && _messageController.text.trim().isEmpty;
-      });
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Fout bij het selecteren van video: $e')),
@@ -1085,11 +1021,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendImageMessage(File imageFile) async {
-    // Disable banner availability when sending image
-    setState(() {
-      _bannerAvailable = false;
-      _showSendToTeamBanner = false;
-    });
 
     // Create new image message with uploading status
     final newMessage = ChatMessage(
@@ -1117,7 +1048,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       if (_endpoint == null) return;
 
-      final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+      final mediaUrl = _endpoint?.effectiveMediaUrl ?? '';
       final request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
       _applyMediaAuth(request);
@@ -1177,8 +1108,6 @@ class _ChatScreenState extends State<ChatScreen> {
           await _saveMessages();
           debugPrint('DEBUG: Messages saved to storage');
 
-          // Show "Team inlichten" banner after successful upload
-          _displaySendToTeamBanner();
 
           // Description stored in metadata but not displayed as separate message
         } else {
@@ -1482,12 +1411,6 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    // Disable banner availability when sending video
-    setState(() {
-      _bannerAvailable = false;
-      _showSendToTeamBanner = false;
-    });
-
     // Show compressing message
     final compressingMessage = ChatMessage(
       text: "🎬 Video wordt gecomprimeerd...",
@@ -1638,7 +1561,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // Generate thumbnail before upload
       final thumbnailPath = await _generateVideoThumbnail(videoFile);
 
-      final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+      final mediaUrl = _endpoint?.effectiveMediaUrl ?? '';
       final request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
       _applyMediaAuth(request);
@@ -1710,8 +1633,6 @@ class _ChatScreenState extends State<ChatScreen> {
           await _saveMessages();
           debugPrint('DEBUG: Messages saved to storage');
 
-          // Show "Team inlichten" banner after successful upload
-          _displaySendToTeamBanner();
         } else {
           debugPrint(
             'DEBUG: Metadata was null - response not parsed correctly',
@@ -1762,29 +1683,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickDocument() async {
-    // Hide banner temporarily during document picking
-    setState(() {
-      _showSendToTeamBanner = false;
-    });
-
     try {
       final documentFile = await AttachmentService.pickDocument();
       if (documentFile != null) {
         await _sendDocumentMessage(documentFile);
-      } else {
-        // Document picking cancelled - show banner again if available and text field empty
-        setState(() {
-          _showSendToTeamBanner =
-              _bannerAvailable && _messageController.text.trim().isEmpty;
-        });
       }
     } catch (e) {
-      // Error occurred - show banner again if available and text field empty
-      setState(() {
-        _showSendToTeamBanner =
-            _bannerAvailable && _messageController.text.trim().isEmpty;
-      });
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Fout bij het selecteren van document: $e')),
@@ -1794,11 +1698,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendDocumentMessage(File documentFile) async {
-    // Disable banner availability when sending document
-    setState(() {
-      _bannerAvailable = false;
-      _showSendToTeamBanner = false;
-    });
 
     final fileInfo = AttachmentService.getFileInfo(documentFile);
 
@@ -1827,7 +1726,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       if (_endpoint == null) return;
 
-      final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+      final mediaUrl = _endpoint?.effectiveMediaUrl ?? '';
       final request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
       _applyMediaAuth(request);
@@ -1884,8 +1783,6 @@ class _ChatScreenState extends State<ChatScreen> {
           await _saveMessages();
           debugPrint('DEBUG: Messages saved to storage');
 
-          // Show "Team inlichten" banner after successful upload
-          _displaySendToTeamBanner();
         } else {
           debugPrint(
             'DEBUG: Metadata was null - response not parsed correctly',
@@ -1943,24 +1840,9 @@ class _ChatScreenState extends State<ChatScreen> {
         _userTypedAfterEmailSent = true;
       }
     });
-
-    if (text.trim().isEmpty && _bannerAvailable) {
-      setState(() {
-        _showSendToTeamBanner = true;
-      });
-    } else {
-      setState(() {
-        _showSendToTeamBanner = false;
-      });
-    }
   }
 
   void _onTextFieldTapped() {
-    if (_showSendToTeamBanner) {
-      setState(() {
-        _showSendToTeamBanner = false;
-      });
-    }
     // Scroll to bottom when input is tapped
     _scrollToBottom();
   }
@@ -2081,16 +1963,11 @@ class _ChatScreenState extends State<ChatScreen> {
         'Bericht ontvangen en verwerkt',
       );
 
-      // Detect and strip banner tag from response
-      final result = _detectAndStripBannerTag(botResponse);
-      final cleanText = result['text'];
-      final shouldShowBanner = result['shouldShowBanner'];
-
       setState(() {
         _messages.insert(
           0,
           ChatMessage(
-            text: cleanText,
+            text: _stripBannerTag(botResponse),
             isCustomer: false,
             timestamp: DateTime.now(),
             status: MessageStatus.sent,
@@ -2100,11 +1977,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // Generate and play audio if enabled
       await _generateAndPlayAudio();
-
-      // Show banner only if tag was detected
-      if (shouldShowBanner) {
-        _displaySendToTeamBanner();
-      }
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -2132,7 +2004,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send image file message
   Future<void> _sendImageFileMessage(ChatMessage message) async {
-    final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+    final mediaUrl = _endpoint?.effectiveMediaUrl ?? '';
     var request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
     request.fields['action'] = _endpoint?.imageAction ?? 'sendImage';
@@ -2175,8 +2047,6 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
 
-      _displaySendToTeamBanner();
-
       // Fetch updated chat title
       _fetchChatTitle();
     } else {
@@ -2186,7 +2056,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send audio file message (simplified version)
   Future<void> _sendAudioFileMessage(ChatMessage message) async {
-    final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+    final mediaUrl = _endpoint?.effectiveMediaUrl ?? '';
     var request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
     request.fields['action'] = _endpoint?.audioAction ?? 'sendAudio';
@@ -2232,8 +2102,6 @@ class _ChatScreenState extends State<ChatScreen> {
       // Generate and play audio if enabled
       await _generateAndPlayAudio();
 
-      _displaySendToTeamBanner();
-
       // Fetch updated chat title
       _fetchChatTitle();
     } else {
@@ -2243,7 +2111,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send document file message (simplified version)
   Future<void> _sendDocumentFileMessage(ChatMessage message) async {
-    final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+    final mediaUrl = _endpoint?.effectiveMediaUrl ?? '';
     var request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
     request.fields['action'] = _endpoint?.documentAction ?? 'sendDocument';
@@ -2287,8 +2155,6 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
 
-      _displaySendToTeamBanner();
-
       // Fetch updated chat title
       _fetchChatTitle();
     } else {
@@ -2298,7 +2164,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send video file message
   Future<void> _sendVideoFileMessage(ChatMessage message) async {
-    final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+    final mediaUrl = _endpoint?.effectiveMediaUrl ?? '';
     var request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
     request.fields['action'] = _endpoint?.videoAction ?? 'sendVideo';
@@ -2344,8 +2210,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
       });
-
-      _displaySendToTeamBanner();
 
       // Fetch updated chat title
       _fetchChatTitle();
@@ -3087,77 +2951,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildSendToTeamBanner() {
-    if (!_showSendToTeamBanner) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            decoration: const BoxDecoration(
-              color: Color(0xFFCC0001),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.check, color: Colors.white, size: 12),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Alle info compleet? Klik op verstuur, dan gaan wij aan de slag!',
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF374151),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _showSendToTeamBanner = false;
-              });
-              _bannerTimer?.cancel();
-              _sendEmail();
-            },
-            style: TextButton.styleFrom(
-              backgroundColor: const Color(0xFFCC0001),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-            ),
-            child: const Text(
-              'Klaar -> verstuur',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _displaySendToTeamBanner() {
-    // Cancel any existing timer
-    _bannerTimer?.cancel();
-
-    // Make banner available and show if text field is empty
-    setState(() {
-      _bannerAvailable = true;
-      _showSendToTeamBanner = _messageController.text.trim().isEmpty;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
@@ -3220,8 +3013,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
             _buildEmailSentBanner(),
 
-            _buildSendToTeamBanner(),
-
             // Recording indicator
             if (_isRecording)
               Container(
@@ -3272,8 +3063,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       child: Row(
                         children: [
-                          // Attachment icon (only shown when media URL is configured)
-                          if (_endpoint?.mediaUrl?.isNotEmpty == true)
+                          // Attachment icon (shown when media is enabled)
+                          if (_endpoint?.mediaUseSameEndpoint == true ||
+                              _endpoint?.mediaUrl?.isNotEmpty == true)
                             IconButton(
                               onPressed:
                                   _isLoading ? null : _showAttachmentDialog,
