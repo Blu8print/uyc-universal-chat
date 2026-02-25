@@ -6,7 +6,6 @@ import '../constants/app_colors.dart';
 import '../models/endpoint_model.dart';
 import '../services/endpoint_service.dart';
 import '../services/session_service.dart';
-import '../services/storage_service.dart';
 import '../widgets/app_drawer.dart';
 import 'chat_screen.dart';
 import 'endpoint_editor_screen.dart';
@@ -41,18 +40,8 @@ class _EndpointListScreenState extends State<EndpointListScreen> {
     // Set as current endpoint
     await EndpointService.setCurrentEndpoint(endpoint);
 
-    // Get or create session for this endpoint
-    final sessionId = await EndpointService.getOrCreateSessionForEndpoint(endpoint);
-
-    // Load the session into SessionService
-    final sessionData = await StorageService.loadSessionData(sessionId);
-    if (sessionData != null) {
-      // Set as current session
-      await SessionService.loadSession(sessionData);
-    } else {
-      // If no session data exists, initialize a new one
-      await SessionService.initialize();
-    }
+    // Always start a fresh session
+    await SessionService.startNewSession();
 
     if (mounted) {
       Navigator.of(context).push(

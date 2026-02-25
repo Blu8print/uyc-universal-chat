@@ -258,13 +258,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
   Future<void> _createNewSession(Endpoint endpoint) async {
     Navigator.pop(context); // Close bottom sheet
 
-    // TODO Step 2: Create new session instead of reusing existing
-    // Currently uses 1:1 pattern (one session per endpoint)
-    // Future: Call SessionService.startNewSession() and link to endpoint
-    final sessionId = await EndpointService.getOrCreateSessionForEndpoint(endpoint);
-
-    // Switch to the session
-    await SessionService.switchToSession(sessionId);
+    // Always start a fresh session
+    await SessionService.startNewSession();
 
     // Set as current endpoint
     await EndpointService.setCurrentEndpoint(endpoint);
