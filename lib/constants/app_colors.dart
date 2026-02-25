@@ -9,9 +9,6 @@ class AppColors {
   static const Color accent = Color(0xFFd98324); // Orange
   static const Color textLight = Color(0xFFf2e8cf); // Cream
 
-  // Legacy colors (for reference during migration)
-  // static const Color oldPrimary = Color(0xFFCC0001); // Kwaaijongens red
-
   // Semantic Colors
   static const Color background = Colors.white;
   static const Color textPrimary = Color(0xFF1A1A1A);

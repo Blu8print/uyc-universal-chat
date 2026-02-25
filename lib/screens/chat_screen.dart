@@ -4,21 +4,22 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
-import '../services/auth_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/session_service.dart';
 import '../services/storage_service.dart';
 import '../services/attachment_service.dart';
 import '../services/firebase_messaging_service.dart';
 import '../services/api_service.dart';
+import '../services/endpoint_service.dart';
 import '../constants/app_colors.dart';
+import '../models/endpoint_model.dart';
 import '../widgets/audio_message_widget.dart';
 import '../widgets/image_message_widget.dart';
 import 'image_viewer_screen.dart';
 import '../widgets/document_message_widget.dart';
 import '../widgets/video_message_widget.dart';
 import 'package:image_picker/image_picker.dart';
-import 'start_screen.dart';
+import 'sessions_screen.dart';
 import 'video_player_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -28,37 +29,11 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Kwaaijongens APP',
-      theme: ThemeData(
-        primarySwatch: Colors.red,
-        primaryColor: const Color(0xFFCC0001),
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFCC0001),
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-      ),
-      home: const ChatScreen(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}
-
 class ChatScreen extends StatefulWidget {
   final String? actionContext;
+  final Endpoint? endpoint;
 
-  const ChatScreen({super.key, this.actionContext});
+  const ChatScreen({super.key, this.actionContext, this.endpoint});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -86,29 +61,37 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _chatType;
   bool _audioEnabled = false;
   AudioPlayer? _audioPlayer;
+  Endpoint? _endpoint;
 
-  final String _n8nChatUrl =
-      'https://automation.kwaaijongens.nl/webhook/46b0b5ec-132d-4aca-97ec-0d11d05f66bc/chat';
-  final String _n8nImageUrl =
-      'https://automation.kwaaijongens.nl/webhook/media_image';
-  final String _n8nDocumentUrl =
-      'https://automation.kwaaijongens.nl/webhook/media_document';
-  final String _n8nVideoUrl =
-      'https://automation.kwaaijongens.nl/webhook/media_video';
-  final String _n8nEmailUrl =
-      'https://automation.kwaaijongens.nl/webhook/send-email';
-  final String _n8nSessionsUrl =
-      'https://automation.kwaaijongens.nl/webhook/sessions';
-  final String _n8nAudioUrl =
-      'https://automation.kwaaijongens.nl/webhook/generate_audio';
+  // Chat URL comes from the configured endpoint
+  String get _n8nChatUrl => _endpoint?.url ?? '';
 
-  // Basic Auth credentials
-  static const String _basicAuth = 'SystemArchitect:A\$pp_S3cr3t';
+  // Helper method to get auth header (from endpoint only)
+  String? _getAuthHeader() {
+    return _endpoint?.getAuthHeader();
+  }
 
-  // Helper method to get Basic Auth header
-  String _getBasicAuthHeader() {
-    final authBytes = utf8.encode(_basicAuth);
-    return 'Basic ${base64Encode(authBytes)}';
+  // Helper to build headers with optional auth
+  Map<String, String> _buildHeaders({Map<String, String>? additional}) {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...?additional,
+    };
+
+    final authHeader = _getAuthHeader();
+    if (authHeader != null) {
+      if (_endpoint?.authType == 'header') {
+        // Custom header format: "HeaderName: HeaderValue"
+        final parts = authHeader.split(':');
+        if (parts.length == 2) {
+          headers[parts[0].trim()] = parts[1].trim();
+        }
+      } else {
+        headers['Authorization'] = authHeader;
+      }
+    }
+
+    return headers;
   }
 
   final List<ChatMessage> _messages = [];
@@ -117,7 +100,16 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
+    _endpoint = widget.endpoint;
+    _loadEndpointIfNeeded();
     _initializeApp();
+  }
+
+  Future<void> _loadEndpointIfNeeded() async {
+    // If no endpoint provided, try to load current endpoint from service
+    if (_endpoint == null) {
+      _endpoint = await EndpointService.loadCurrentEndpoint();
+    }
   }
 
   Future<void> _handleActionContext() async {
@@ -172,7 +164,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _initializeServices() async {
-    // Session should already be initialized by StartScreen before navigation
+    // Session should already be initialized before navigation
     // Only initialize Firebase messaging here
     await _initializeFirebaseMessaging();
   }
@@ -180,21 +172,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _initializeFirebaseMessaging() async {
     try {
       await FirebaseMessagingService.initialize();
-
-      // Set message handler for foreground notifications
       FirebaseMessagingService.setMessageHandler(_handleFCMMessage);
-
-      // Register FCM token with n8n backend
-      final tokenData = FirebaseMessagingService.getTokenData();
-      if (tokenData != null) {
-        final user = AuthService.currentUser;
-        await ApiService.sendFCMToken(
-          fcmToken: tokenData['fcmToken'],
-          sessionId: tokenData['sessionId'],
-          platform: tokenData['platform'],
-          phoneNumber: user?.phone,
-        );
-      }
     } catch (e) {
       debugPrint('Firebase Messaging initialization failed: $e');
     }
@@ -533,11 +511,8 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final response = await http
           .post(
-            Uri.parse(_n8nAudioUrl),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': _getBasicAuthHeader(),
-            },
+            Uri.parse(_endpoint?.url ?? ''),
+            headers: _buildHeaders(),
             body: jsonEncode({
               'sessionId': SessionService.currentSessionId ?? 'no-session',
             }),
@@ -1119,24 +1094,29 @@ class _ChatScreenState extends State<ChatScreen> {
     File imageFile,
   ) async {
     try {
-      final user = await StorageService.getUser();
-      if (user == null) return;
+      if (_endpoint == null) return;
 
-      final request = http.MultipartRequest('POST', Uri.parse(_n8nImageUrl));
+      final request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
 
-      request.headers.addAll({
-        'Authorization': _getBasicAuthHeader(),
-        'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-      });
+      final authHeader = _getAuthHeader();
+      if (authHeader != null) {
+        if (_endpoint?.authType == 'header') {
+          final parts = authHeader.split(':');
+          if (parts.length == 2) {
+            request.headers[parts[0].trim()] = parts[1].trim();
+          }
+        } else {
+          request.headers['Authorization'] = authHeader;
+        }
+      }
+      request.headers['X-Session-ID'] =
+          SessionService.currentSessionId ?? 'no-session';
 
       request.files.add(
         await http.MultipartFile.fromPath('image', imageFile.path),
       );
       request.fields['sessionId'] =
           SessionService.currentSessionId ?? 'no-session';
-      request.fields['phoneNumber'] = user.phoneNumber;
-      request.fields['name'] = user.name;
-      request.fields['companyName'] = user.companyName;
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
@@ -1278,31 +1258,16 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       debugPrint('DEBUG: Deleting image: ${message.mediaMetadata!.filename}');
 
-      final response = await http.post(
-        Uri.parse('https://automation.kwaaijongens.nl/webhook/delete_media'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-        },
-        body: jsonEncode(message.mediaMetadata!.toJson()),
-      );
-
-      debugPrint('DEBUG: Delete response status: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        // Remove from chat and save
-        setState(() {
-          _messages.removeWhere(
-            (m) =>
-                m.timestamp == message.timestamp &&
-                m.attachmentType == AttachmentType.image,
-          );
-        });
-        await _saveMessages();
-        debugPrint('DEBUG: Image deleted and history saved');
-      } else {
-        debugPrint('DEBUG: Delete failed: ${response.body}');
-      }
+      // Remove from chat and save (local only)
+      setState(() {
+        _messages.removeWhere(
+          (m) =>
+              m.timestamp == message.timestamp &&
+              m.attachmentType == AttachmentType.image,
+        );
+      });
+      await _saveMessages();
+      debugPrint('DEBUG: Image deleted and history saved');
     } catch (e) {
       debugPrint('Error deleting image: $e');
     }
@@ -1421,28 +1386,16 @@ class _ChatScreenState extends State<ChatScreen> {
         'DEBUG: Deleting document: ${message.mediaMetadata!.filename}',
       );
 
-      final response = await http.post(
-        Uri.parse('https://automation.kwaaijongens.nl/webhook/delete_media'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-        },
-        body: jsonEncode(message.mediaMetadata!.toJson()),
-      );
-
-      debugPrint('DEBUG: Delete response status: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        setState(() {
-          _messages.removeWhere(
-            (m) =>
-                m.timestamp == message.timestamp &&
-                m.attachmentType == AttachmentType.document,
-          );
-        });
-        await _saveMessages();
-        debugPrint('DEBUG: Document deleted and history saved');
-      }
+      // Remove from chat and save (local only)
+      setState(() {
+        _messages.removeWhere(
+          (m) =>
+              m.timestamp == message.timestamp &&
+              m.attachmentType == AttachmentType.document,
+        );
+      });
+      await _saveMessages();
+      debugPrint('DEBUG: Document deleted and history saved');
     } catch (e) {
       debugPrint('Error deleting document: $e');
     }
@@ -1486,28 +1439,16 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       debugPrint('DEBUG: Deleting video: ${message.mediaMetadata!.filename}');
 
-      final response = await http.post(
-        Uri.parse('https://automation.kwaaijongens.nl/webhook/delete_media'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': _getBasicAuthHeader(),
-        },
-        body: jsonEncode(message.mediaMetadata!.toJson()),
-      );
-
-      debugPrint('DEBUG: Delete response status: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        setState(() {
-          _messages.removeWhere(
-            (m) =>
-                m.timestamp == message.timestamp &&
-                m.attachmentType == AttachmentType.video,
-          );
-        });
-        await _saveMessages();
-        debugPrint('DEBUG: Video deleted and history saved');
-      }
+      // Remove from chat and save (local only)
+      setState(() {
+        _messages.removeWhere(
+          (m) =>
+              m.timestamp == message.timestamp &&
+              m.attachmentType == AttachmentType.video,
+        );
+      });
+      await _saveMessages();
+      debugPrint('DEBUG: Video deleted and history saved');
     } catch (e) {
       debugPrint('Error deleting video: $e');
     }
@@ -1681,18 +1622,26 @@ class _ChatScreenState extends State<ChatScreen> {
     File videoFile,
   ) async {
     try {
-      final user = await StorageService.getUser();
-      if (user == null) return;
+      if (_endpoint == null) return;
 
       // Generate thumbnail before upload
       final thumbnailPath = await _generateVideoThumbnail(videoFile);
 
-      final request = http.MultipartRequest('POST', Uri.parse(_n8nVideoUrl));
+      final request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
 
-      request.headers.addAll({
-        'Authorization': _getBasicAuthHeader(),
-        'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-      });
+      final authHeader = _getAuthHeader();
+      if (authHeader != null) {
+        if (_endpoint?.authType == 'header') {
+          final parts = authHeader.split(':');
+          if (parts.length == 2) {
+            request.headers[parts[0].trim()] = parts[1].trim();
+          }
+        } else {
+          request.headers['Authorization'] = authHeader;
+        }
+      }
+      request.headers['X-Session-ID'] =
+          SessionService.currentSessionId ?? 'no-session';
 
       request.files.add(
         await http.MultipartFile.fromPath('video', videoFile.path),
@@ -1712,9 +1661,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
       request.fields['sessionId'] =
           SessionService.currentSessionId ?? 'no-session';
-      request.fields['phoneNumber'] = user.phoneNumber;
-      request.fields['name'] = user.name;
-      request.fields['companyName'] = user.companyName;
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
@@ -1879,24 +1825,29 @@ class _ChatScreenState extends State<ChatScreen> {
     File documentFile,
   ) async {
     try {
-      final user = await StorageService.getUser();
-      if (user == null) return;
+      if (_endpoint == null) return;
 
-      final request = http.MultipartRequest('POST', Uri.parse(_n8nDocumentUrl));
+      final request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
 
-      request.headers.addAll({
-        'Authorization': _getBasicAuthHeader(),
-        'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-      });
+      final authHeader = _getAuthHeader();
+      if (authHeader != null) {
+        if (_endpoint?.authType == 'header') {
+          final parts = authHeader.split(':');
+          if (parts.length == 2) {
+            request.headers[parts[0].trim()] = parts[1].trim();
+          }
+        } else {
+          request.headers['Authorization'] = authHeader;
+        }
+      }
+      request.headers['X-Session-ID'] =
+          SessionService.currentSessionId ?? 'no-session';
 
       request.files.add(
         await http.MultipartFile.fromPath('document', documentFile.path),
       );
       request.fields['sessionId'] =
           SessionService.currentSessionId ?? 'no-session';
-      request.fields['phoneNumber'] = user.phoneNumber;
-      request.fields['name'] = user.name;
-      request.fields['companyName'] = user.companyName;
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
@@ -2122,17 +2073,14 @@ class _ChatScreenState extends State<ChatScreen> {
     // Add remaining fields
     requestBody['sessionId'] = SessionService.currentSessionId ?? 'no-session';
     requestBody['chatInput'] = lastMessage.text;
-    requestBody['clientData'] = AuthService.getClientData();
 
     final response = await http
         .post(
           Uri.parse(_n8nChatUrl),
-          headers: {
-            'Content-Type': 'application/json',
+          headers: _buildHeaders(additional: {
             'Accept': 'application/json',
-            'Authorization': _getBasicAuthHeader(),
             'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-          },
+          }),
           body: jsonEncode(requestBody),
         )
         .timeout(const Duration(seconds: 30));
@@ -2194,12 +2142,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send image file message
   Future<void> _sendImageFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest('POST', Uri.parse(_n8nImageUrl));
+    var request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
 
     request.fields['action'] = 'sendImage';
     request.fields['sessionId'] =
         SessionService.currentSessionId ?? 'no-session';
-    request.headers['Authorization'] = _getBasicAuthHeader();
+    final authHeader = _getAuthHeader();
+    if (authHeader != null) {
+      if (_endpoint?.authType == 'header') {
+        final parts = authHeader.split(':');
+        if (parts.length == 2) {
+          request.headers[parts[0].trim()] = parts[1].trim();
+        }
+      } else {
+        request.headers['Authorization'] = authHeader;
+      }
+    }
     request.headers['X-Session-ID'] =
         SessionService.currentSessionId ?? 'no-session';
 
@@ -2208,24 +2166,6 @@ class _ChatScreenState extends State<ChatScreen> {
       request.fields['chatType'] = _chatType!;
     }
 
-    final clientData = AuthService.getClientData();
-    if (clientData != null) {
-      if (clientData['name'] != null) {
-        request.fields['name'] = clientData['name'];
-      }
-      if (clientData['phone'] != null) {
-        request.fields['phone'] = clientData['phone'];
-      }
-      if (clientData['email'] != null) {
-        request.fields['email'] = clientData['email'];
-      }
-      if (clientData['companyName'] != null) {
-        request.fields['companyName'] = clientData['companyName'];
-      }
-      if (clientData['website'] != null) {
-        request.fields['website'] = clientData['website'];
-      }
-    }
 
     request.files.add(
       await http.MultipartFile.fromPath(
@@ -2272,7 +2212,17 @@ class _ChatScreenState extends State<ChatScreen> {
     request.fields['action'] = 'sendAudio';
     request.fields['sessionId'] =
         SessionService.currentSessionId ?? 'no-session';
-    request.headers['Authorization'] = _getBasicAuthHeader();
+    final authHeader = _getAuthHeader();
+    if (authHeader != null) {
+      if (_endpoint?.authType == 'header') {
+        final parts = authHeader.split(':');
+        if (parts.length == 2) {
+          request.headers[parts[0].trim()] = parts[1].trim();
+        }
+      } else {
+        request.headers['Authorization'] = authHeader;
+      }
+    }
     request.headers['X-Session-ID'] =
         SessionService.currentSessionId ?? 'no-session';
 
@@ -2281,24 +2231,6 @@ class _ChatScreenState extends State<ChatScreen> {
       request.fields['chatType'] = _chatType!;
     }
 
-    final clientData = AuthService.getClientData();
-    if (clientData != null) {
-      if (clientData['name'] != null) {
-        request.fields['name'] = clientData['name'];
-      }
-      if (clientData['phone'] != null) {
-        request.fields['phone'] = clientData['phone'];
-      }
-      if (clientData['email'] != null) {
-        request.fields['email'] = clientData['email'];
-      }
-      if (clientData['companyName'] != null) {
-        request.fields['companyName'] = clientData['companyName'];
-      }
-      if (clientData['website'] != null) {
-        request.fields['website'] = clientData['website'];
-      }
-    }
 
     request.files.add(
       await http.MultipartFile.fromPath(
@@ -2343,12 +2275,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send document file message (simplified version)
   Future<void> _sendDocumentFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest('POST', Uri.parse(_n8nDocumentUrl));
+    var request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
 
     request.fields['action'] = 'sendDocument';
     request.fields['sessionId'] =
         SessionService.currentSessionId ?? 'no-session';
-    request.headers['Authorization'] = _getBasicAuthHeader();
+    final authHeader = _getAuthHeader();
+    if (authHeader != null) {
+      if (_endpoint?.authType == 'header') {
+        final parts = authHeader.split(':');
+        if (parts.length == 2) {
+          request.headers[parts[0].trim()] = parts[1].trim();
+        }
+      } else {
+        request.headers['Authorization'] = authHeader;
+      }
+    }
     request.headers['X-Session-ID'] =
         SessionService.currentSessionId ?? 'no-session';
 
@@ -2357,24 +2299,6 @@ class _ChatScreenState extends State<ChatScreen> {
       request.fields['chatType'] = _chatType!;
     }
 
-    final clientData = AuthService.getClientData();
-    if (clientData != null) {
-      if (clientData['name'] != null) {
-        request.fields['name'] = clientData['name'];
-      }
-      if (clientData['phone'] != null) {
-        request.fields['phone'] = clientData['phone'];
-      }
-      if (clientData['email'] != null) {
-        request.fields['email'] = clientData['email'];
-      }
-      if (clientData['companyName'] != null) {
-        request.fields['companyName'] = clientData['companyName'];
-      }
-      if (clientData['website'] != null) {
-        request.fields['website'] = clientData['website'];
-      }
-    }
 
     final fileInfo = AttachmentService.getFileInfo(message.documentFile!);
     request.files.add(
@@ -2417,12 +2341,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send video file message
   Future<void> _sendVideoFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest('POST', Uri.parse(_n8nVideoUrl));
+    var request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
 
     request.fields['action'] = 'sendVideo';
     request.fields['sessionId'] =
         SessionService.currentSessionId ?? 'no-session';
-    request.headers['Authorization'] = _getBasicAuthHeader();
+    final authHeader = _getAuthHeader();
+    if (authHeader != null) {
+      if (_endpoint?.authType == 'header') {
+        final parts = authHeader.split(':');
+        if (parts.length == 2) {
+          request.headers[parts[0].trim()] = parts[1].trim();
+        }
+      } else {
+        request.headers['Authorization'] = authHeader;
+      }
+    }
     request.headers['X-Session-ID'] =
         SessionService.currentSessionId ?? 'no-session';
 
@@ -2431,24 +2365,6 @@ class _ChatScreenState extends State<ChatScreen> {
       request.fields['chatType'] = _chatType!;
     }
 
-    final clientData = AuthService.getClientData();
-    if (clientData != null) {
-      if (clientData['name'] != null) {
-        request.fields['name'] = clientData['name'];
-      }
-      if (clientData['phone'] != null) {
-        request.fields['phone'] = clientData['phone'];
-      }
-      if (clientData['email'] != null) {
-        request.fields['email'] = clientData['email'];
-      }
-      if (clientData['companyName'] != null) {
-        request.fields['companyName'] = clientData['companyName'];
-      }
-      if (clientData['website'] != null) {
-        request.fields['website'] = clientData['website'];
-      }
-    }
 
     // Get video filename
     final videoPath = message.videoFile!.path;
@@ -2527,18 +2443,15 @@ class _ChatScreenState extends State<ChatScreen> {
                   },
                 )
                 .toList(),
-        'clientData': AuthService.getClientData(),
       };
 
       final response = await http
           .post(
-            Uri.parse(_n8nEmailUrl),
-            headers: {
-              'Content-Type': 'application/json',
+            Uri.parse(_endpoint?.url ?? ''),
+            headers: _buildHeaders(additional: {
               'Accept': 'application/json',
-              'Authorization': _getBasicAuthHeader(),
               'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-            },
+            }),
             body: jsonEncode(emailData),
           )
           .timeout(const Duration(seconds: 120));
@@ -2623,9 +2536,6 @@ class _ChatScreenState extends State<ChatScreen> {
       case 'clear_conversation':
         _clearConversation();
         break;
-      case 'call_kwaaijongens':
-        _callKwaaijongens();
-        break;
       case 'privacy_policy':
         _openPrivacyPolicy();
         break;
@@ -2691,7 +2601,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   // Clear current session data
                                   await SessionService.clearSession();
 
-                                  // Close dialog and navigate to StartScreen
+                                  // Close dialog and navigate to SessionsScreen
                                   if (mounted) {
                                     // ignore: use_build_context_synchronously
                                     Navigator.pop(dialogContext);
@@ -2701,7 +2611,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                       scaffoldContext,
                                       MaterialPageRoute(
                                         builder:
-                                            (context) => const StartScreen(),
+                                            (context) => const SessionsScreen(),
                                       ),
                                     );
                                   }
@@ -2744,7 +2654,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _showConversationInfo() async {
-    final user = await StorageService.getUser();
     final sessionData = SessionService.currentSessionData;
 
     if (sessionData == null) {
@@ -2783,13 +2692,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildInfoRow(
-                      'Bedrijfsnaam',
-                      user?.companyName ?? 'Onbekend',
-                    ),
-                    const SizedBox(height: 12),
-                    _buildInfoRow('Naam', user?.name ?? 'Onbekend'),
-                    const SizedBox(height: 12),
                     _buildInfoRow('Sessie ID', sessionData.sessionId),
                     const SizedBox(height: 12),
                     _buildInfoRow(
@@ -2859,166 +2761,33 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // Title is set from the endpoint name — no backend needed
   Future<void> _fetchChatTitle() async {
-    try {
-      final clientData = AuthService.getClientData();
-      final requestBody = {
-        'method': 'get',
-        'sessionId': SessionService.currentSessionId ?? 'no-session',
-        'phoneNumber': clientData?['phone'] ?? '',
-        'name': clientData?['name'] ?? '',
-        'company': clientData?['companyName'] ?? '',
-      };
-
-      // Add chatType if available
-      if (_chatType != null) {
-        requestBody['chatType'] = _chatType!;
-      }
-
-      debugPrint('DEBUG: Fetching chat title with: ${jsonEncode(requestBody)}');
-
-      final response = await http
-          .post(
-            Uri.parse(_n8nSessionsUrl),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': _getBasicAuthHeader(),
-              'X-Session-ID': SessionService.currentSessionId ?? 'no-session',
-            },
-            body: jsonEncode(requestBody),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      debugPrint(
-        'DEBUG: Chat title API response: ${response.statusCode} - ${response.body}',
-      );
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> session = jsonDecode(response.body);
-        final sessionTitle = session['session_title']?.toString();
-        final sessionChatType =
-            session['chatType']?.toString() ?? session['chat_type']?.toString();
-        debugPrint('DEBUG: Extracted session title: $sessionTitle');
-        debugPrint('DEBUG: Extracted chatType: $sessionChatType');
-        debugPrint('DEBUG: Current _chatTitle value: $_chatTitle');
-        debugPrint('DEBUG: Current _chatType value: $_chatType');
-        debugPrint('DEBUG: Widget mounted: $mounted');
-
-        if (sessionTitle != null &&
-            sessionTitle.isNotEmpty &&
-            !sessionTitle.startsWith('newsession_') &&
-            !sessionTitle.startsWith('session_')) {
-          debugPrint('DEBUG: Updating chat title to: $sessionTitle');
-          if (mounted) {
-            setState(() {
-              _chatTitle = sessionTitle;
-              // Update chatType if available from response
-              if (sessionChatType != null && sessionChatType.isNotEmpty) {
-                _chatType = sessionChatType;
-                debugPrint('DEBUG: Updated _chatType to: $_chatType');
-              }
-            });
-            debugPrint(
-              'DEBUG: setState completed, new _chatTitle: $_chatTitle, new _chatType: $_chatType',
-            );
-          } else {
-            debugPrint('DEBUG: Widget not mounted, skipping setState');
-          }
-        } else {
-          debugPrint('DEBUG: Session title is null or empty');
-        }
-      }
-    } catch (e) {
-      // Silently handle errors - keep existing title
-      debugPrint('Error fetching chat title: $e');
+    if (_endpoint != null && mounted) {
+      setState(() => _chatTitle = _endpoint!.name);
     }
   }
 
+  // Deletes session locally — no backend call needed
   Future<bool> _deleteSessionOnWebhook(String sessionId) async {
-    try {
-      final clientData = AuthService.getClientData();
-      final requestBody = {
-        'method': 'delete',
-        'sessionId': sessionId,
-        'phoneNumber': clientData?['phone'] ?? '',
-        'name': clientData?['name'] ?? '',
-        'companyName': clientData?['companyName'] ?? '',
-      };
-
-      // Add chatType if available
-      if (_chatType != null) {
-        requestBody['chatType'] = _chatType!;
-      }
-
-      debugPrint('DEBUG: Deleting session with: ${jsonEncode(requestBody)}');
-
-      final response = await http
-          .post(
-            Uri.parse(_n8nSessionsUrl),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': _getBasicAuthHeader(),
-              'X-Session-ID': sessionId,
-            },
-            body: jsonEncode(requestBody),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      debugPrint(
-        'DEBUG: Delete session API response: ${response.statusCode} - ${response.body}',
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        if (responseData['response'] == 'success') {
-          debugPrint('DEBUG: Session deleted successfully');
-          return true;
-        } else {
-          debugPrint('DEBUG: Unexpected response: $responseData');
-          return false;
-        }
-      } else {
-        debugPrint(
-          'DEBUG: Delete session failed with status: ${response.statusCode}',
-        );
-        return false;
-      }
-    } catch (e) {
-      debugPrint('Error deleting session: $e');
-      return false;
-    }
-  }
-
-  Future<void> _callKwaaijongens() async {
-    final Uri phoneUri = Uri.parse('tel:+31853307500');
-    if (await canLaunchUrl(phoneUri)) {
-      await launchUrl(phoneUri);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kan telefoon app niet openen')),
-        );
-      }
-    }
+    return true;
   }
 
   Future<void> _openPrivacyPolicy() async {
-    final Uri privacyUri = Uri.parse('https://kwaaijongens.nl/privacy-app');
+    final Uri privacyUri = Uri.parse('https://unlockyourcloud.com/privacy');
     if (await canLaunchUrl(privacyUri)) {
       await launchUrl(privacyUri, mode: LaunchMode.externalApplication);
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kan browser niet openen')),
+          const SnackBar(content: Text('Could not open browser')),
         );
       }
     }
   }
 
   Future<void> _openHelpSupport() async {
-    final Uri supportUri = Uri.parse('https://kwaaijongens.nl/app-support');
+    final Uri supportUri = Uri.parse('https://unlockyourcloud.com/support');
     if (await canLaunchUrl(supportUri)) {
       await launchUrl(supportUri, mode: LaunchMode.externalApplication);
     } else {
@@ -3051,12 +2820,12 @@ class _ChatScreenState extends State<ChatScreen> {
                     width: 64,
                     height: 64,
                     decoration: const BoxDecoration(
-                      color: Color(0xFFCC0001),
+                      color: Color(0xFF1a6b8a),
                       shape: BoxShape.circle,
                     ),
                     child: const Center(
                       child: Text(
-                        'K',
+                        'U',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 32,
@@ -3068,82 +2837,23 @@ class _ChatScreenState extends State<ChatScreen> {
                   const SizedBox(height: 16),
                   // App name
                   const Text(
-                    'Kwaaijongens APP',
+                    'UYC',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Unlock Your Cloud',
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
                   const SizedBox(height: 8),
                   // Version
                   Text(
                     'Versie ${packageInfo.version}',
                     style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 16),
-                  // Developer info
-                  const Text(
-                    'Kwaaijongens WordPress bureau',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Contact details
-                  GestureDetector(
-                    onTap: () => _callKwaaijongens(),
-                    child: const Text(
-                      '085 - 330 7500',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFFCC0001),
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () async {
-                      final Uri emailUri = Uri.parse(
-                        'mailto:app@kwaaijongens.nl',
-                      );
-                      if (await canLaunchUrl(emailUri)) {
-                        await launchUrl(emailUri);
-                      }
-                    },
-                    child: const Text(
-                      'app@kwaaijongens.nl',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFFCC0001),
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () async {
-                      final Uri websiteUri = Uri.parse(
-                        'https://www.kwaaijongens.nl',
-                      );
-                      if (await canLaunchUrl(websiteUri)) {
-                        await launchUrl(
-                          websiteUri,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
-                    },
-                    child: const Text(
-                      'www.kwaaijongens.nl',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFFCC0001),
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
                   ),
                   const SizedBox(height: 24),
                   // Close button
@@ -3152,7 +2862,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: ElevatedButton(
                       onPressed: () => Navigator.of(context).pop(),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFCC0001),
+                        backgroundColor: const Color(0xFF1a6b8a),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
@@ -3189,10 +2899,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           IconButton(
             onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const StartScreen()),
-              );
+              Navigator.pop(context);
             },
             icon: Icon(
               Icons.arrow_back_ios,
@@ -3327,25 +3034,6 @@ class _ChatScreenState extends State<ChatScreen> {
                           SizedBox(width: 12),
                           Text(
                             'Helpdesk (FAQ\'s)',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'call_kwaaijongens',
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.phone, color: Colors.grey, size: 20),
-                          SizedBox(width: 12),
-                          Text(
-                            'Bel Kwaaijongens',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.black87,

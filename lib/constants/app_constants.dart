@@ -17,8 +17,5 @@ class AppConstants {
   static const String privacyPolicyUrl = 'https://unlockyourcloud.com/privacy';
   static const String supportUrl = 'https://unlockyourcloud.com/support';
 
-  // Legacy Kwaaijongens contacts (for reference)
-  // Email: app@kwaaijongens.nl
-  // Phone: 085-330-7500 / +31853307500
-  // Website: kwaaijongens.nl
+
 }
