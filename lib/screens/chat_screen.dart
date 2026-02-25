@@ -71,6 +71,27 @@ class _ChatScreenState extends State<ChatScreen> {
     return _endpoint?.getAuthHeader();
   }
 
+  // Helper method to get media auth header
+  String? _getMediaAuthHeader() {
+    return _endpoint?.getMediaAuthHeader();
+  }
+
+  // Apply media auth headers to a multipart request
+  void _applyMediaAuth(http.MultipartRequest request) {
+    final authHeader = _getMediaAuthHeader();
+    if (authHeader != null) {
+      if (_endpoint?.mediaAuthType == 'header') {
+        final parts = authHeader.split(':');
+        if (parts.length == 2) {
+          request.headers[parts[0].trim()] = parts[1].trim();
+        }
+      } else {
+        request.headers['Authorization'] = authHeader;
+      }
+    }
+    request.headers['X-Session-ID'] = SessionService.currentSessionId ?? 'no-session';
+  }
+
   // Helper to build headers with optional auth
   Map<String, String> _buildHeaders({Map<String, String>? additional}) {
     final headers = <String, String>{
@@ -1096,27 +1117,17 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       if (_endpoint == null) return;
 
-      final request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
+      final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+      final request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
-      final authHeader = _getAuthHeader();
-      if (authHeader != null) {
-        if (_endpoint?.authType == 'header') {
-          final parts = authHeader.split(':');
-          if (parts.length == 2) {
-            request.headers[parts[0].trim()] = parts[1].trim();
-          }
-        } else {
-          request.headers['Authorization'] = authHeader;
-        }
-      }
-      request.headers['X-Session-ID'] =
-          SessionService.currentSessionId ?? 'no-session';
+      _applyMediaAuth(request);
+      request.fields['action'] = _endpoint?.imageAction ?? 'sendImage';
+      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.fields['chatInput'] = 'Image send';
 
       request.files.add(
         await http.MultipartFile.fromPath('image', imageFile.path),
       );
-      request.fields['sessionId'] =
-          SessionService.currentSessionId ?? 'no-session';
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
@@ -1627,21 +1638,13 @@ class _ChatScreenState extends State<ChatScreen> {
       // Generate thumbnail before upload
       final thumbnailPath = await _generateVideoThumbnail(videoFile);
 
-      final request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
+      final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+      final request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
-      final authHeader = _getAuthHeader();
-      if (authHeader != null) {
-        if (_endpoint?.authType == 'header') {
-          final parts = authHeader.split(':');
-          if (parts.length == 2) {
-            request.headers[parts[0].trim()] = parts[1].trim();
-          }
-        } else {
-          request.headers['Authorization'] = authHeader;
-        }
-      }
-      request.headers['X-Session-ID'] =
-          SessionService.currentSessionId ?? 'no-session';
+      _applyMediaAuth(request);
+      request.fields['action'] = _endpoint?.videoAction ?? 'sendVideo';
+      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.fields['chatInput'] = 'Video send';
 
       request.files.add(
         await http.MultipartFile.fromPath('video', videoFile.path),
@@ -1658,9 +1661,6 @@ class _ChatScreenState extends State<ChatScreen> {
         );
         request.fields['hasThumbnail'] = 'true';
       }
-
-      request.fields['sessionId'] =
-          SessionService.currentSessionId ?? 'no-session';
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
@@ -1827,27 +1827,17 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       if (_endpoint == null) return;
 
-      final request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
+      final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+      final request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
-      final authHeader = _getAuthHeader();
-      if (authHeader != null) {
-        if (_endpoint?.authType == 'header') {
-          final parts = authHeader.split(':');
-          if (parts.length == 2) {
-            request.headers[parts[0].trim()] = parts[1].trim();
-          }
-        } else {
-          request.headers['Authorization'] = authHeader;
-        }
-      }
-      request.headers['X-Session-ID'] =
-          SessionService.currentSessionId ?? 'no-session';
+      _applyMediaAuth(request);
+      request.fields['action'] = _endpoint?.documentAction ?? 'sendDocument';
+      request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+      request.fields['chatInput'] = 'Document send';
 
       request.files.add(
         await http.MultipartFile.fromPath('document', documentFile.path),
       );
-      request.fields['sessionId'] =
-          SessionService.currentSessionId ?? 'no-session';
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
@@ -2142,24 +2132,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send image file message
   Future<void> _sendImageFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
+    final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+    var request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
-    request.fields['action'] = 'sendImage';
-    request.fields['sessionId'] =
-        SessionService.currentSessionId ?? 'no-session';
-    final authHeader = _getAuthHeader();
-    if (authHeader != null) {
-      if (_endpoint?.authType == 'header') {
-        final parts = authHeader.split(':');
-        if (parts.length == 2) {
-          request.headers[parts[0].trim()] = parts[1].trim();
-        }
-      } else {
-        request.headers['Authorization'] = authHeader;
-      }
-    }
-    request.headers['X-Session-ID'] =
-        SessionService.currentSessionId ?? 'no-session';
+    request.fields['action'] = _endpoint?.imageAction ?? 'sendImage';
+    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.fields['chatInput'] = 'Image send';
+    _applyMediaAuth(request);
 
     // Add chatType if available
     if (_chatType != null) {
@@ -2207,24 +2186,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send audio file message (simplified version)
   Future<void> _sendAudioFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest('POST', Uri.parse(_n8nChatUrl));
+    final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+    var request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
-    request.fields['action'] = 'sendAudio';
-    request.fields['sessionId'] =
-        SessionService.currentSessionId ?? 'no-session';
-    final authHeader = _getAuthHeader();
-    if (authHeader != null) {
-      if (_endpoint?.authType == 'header') {
-        final parts = authHeader.split(':');
-        if (parts.length == 2) {
-          request.headers[parts[0].trim()] = parts[1].trim();
-        }
-      } else {
-        request.headers['Authorization'] = authHeader;
-      }
-    }
-    request.headers['X-Session-ID'] =
-        SessionService.currentSessionId ?? 'no-session';
+    request.fields['action'] = _endpoint?.audioAction ?? 'sendAudio';
+    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.fields['chatInput'] = 'Audio send';
+    _applyMediaAuth(request);
 
     // Add chatType if available
     if (_chatType != null) {
@@ -2275,24 +2243,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send document file message (simplified version)
   Future<void> _sendDocumentFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
+    final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+    var request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
-    request.fields['action'] = 'sendDocument';
-    request.fields['sessionId'] =
-        SessionService.currentSessionId ?? 'no-session';
-    final authHeader = _getAuthHeader();
-    if (authHeader != null) {
-      if (_endpoint?.authType == 'header') {
-        final parts = authHeader.split(':');
-        if (parts.length == 2) {
-          request.headers[parts[0].trim()] = parts[1].trim();
-        }
-      } else {
-        request.headers['Authorization'] = authHeader;
-      }
-    }
-    request.headers['X-Session-ID'] =
-        SessionService.currentSessionId ?? 'no-session';
+    request.fields['action'] = _endpoint?.documentAction ?? 'sendDocument';
+    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.fields['chatInput'] = 'Document send';
+    _applyMediaAuth(request);
 
     // Add chatType if available
     if (_chatType != null) {
@@ -2341,24 +2298,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Send video file message
   Future<void> _sendVideoFileMessage(ChatMessage message) async {
-    var request = http.MultipartRequest('POST', Uri.parse(_endpoint?.url ?? ''));
+    final mediaUrl = _endpoint?.mediaUrl ?? _endpoint?.url ?? '';
+    var request = http.MultipartRequest('POST', Uri.parse(mediaUrl));
 
-    request.fields['action'] = 'sendVideo';
-    request.fields['sessionId'] =
-        SessionService.currentSessionId ?? 'no-session';
-    final authHeader = _getAuthHeader();
-    if (authHeader != null) {
-      if (_endpoint?.authType == 'header') {
-        final parts = authHeader.split(':');
-        if (parts.length == 2) {
-          request.headers[parts[0].trim()] = parts[1].trim();
-        }
-      } else {
-        request.headers['Authorization'] = authHeader;
-      }
-    }
-    request.headers['X-Session-ID'] =
-        SessionService.currentSessionId ?? 'no-session';
+    request.fields['action'] = _endpoint?.videoAction ?? 'sendVideo';
+    request.fields['sessionId'] = SessionService.currentSessionId ?? 'no-session';
+    request.fields['chatInput'] = 'Video send';
+    _applyMediaAuth(request);
 
     // Add chatType if available
     if (_chatType != null) {
@@ -3326,19 +3272,20 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       child: Row(
                         children: [
-                          // Attachment icon
-                          IconButton(
-                            onPressed:
-                                _isLoading ? null : _showAttachmentDialog,
-                            icon: Icon(
-                              Icons.attach_file,
-                              color:
-                                  _isLoading
-                                      ? AppColors.textLight.withValues(alpha: 0.3)
-                                      : AppColors.textLight.withValues(alpha: 0.7),
-                              size: 20,
+                          // Attachment icon (only shown when media URL is configured)
+                          if (_endpoint?.mediaUrl?.isNotEmpty == true)
+                            IconButton(
+                              onPressed:
+                                  _isLoading ? null : _showAttachmentDialog,
+                              icon: Icon(
+                                Icons.attach_file,
+                                color:
+                                    _isLoading
+                                        ? AppColors.textLight.withValues(alpha: 0.3)
+                                        : AppColors.textLight.withValues(alpha: 0.7),
+                                size: 20,
+                              ),
                             ),
-                          ),
                           // Text input
                           Expanded(
                             child: ConstrainedBox(

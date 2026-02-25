@@ -12,6 +12,14 @@ class Endpoint {
   final int timeout;
   final DateTime createdAt;
   final String? sessionId;
+  final String? mediaUrl;
+  final String mediaAuthType;
+  final String? mediaAuthValue;
+  final String? mediaUsername;
+  final String imageAction;
+  final String videoAction;
+  final String documentAction;
+  final String audioAction;
 
   Endpoint({
     required this.id,
@@ -25,6 +33,14 @@ class Endpoint {
     this.timeout = 30,
     DateTime? createdAt,
     this.sessionId,
+    this.mediaUrl,
+    this.mediaAuthType = 'none',
+    this.mediaAuthValue,
+    this.mediaUsername,
+    this.imageAction = 'sendImage',
+    this.videoAction = 'sendVideo',
+    this.documentAction = 'sendDocument',
+    this.audioAction = 'sendAudio',
   }) : createdAt = createdAt ?? DateTime.now();
 
   // JSON serialization methods
@@ -41,6 +57,14 @@ class Endpoint {
       'timeout': timeout,
       'createdAt': createdAt.toIso8601String(),
       'sessionId': sessionId,
+      'mediaUrl': mediaUrl,
+      'mediaAuthType': mediaAuthType,
+      'mediaAuthValue': mediaAuthValue,
+      'mediaUsername': mediaUsername,
+      'imageAction': imageAction,
+      'videoAction': videoAction,
+      'documentAction': documentAction,
+      'audioAction': audioAction,
     };
   }
 
@@ -57,7 +81,35 @@ class Endpoint {
       timeout: json['timeout'] as int? ?? 30,
       createdAt: DateTime.parse(json['createdAt'] as String),
       sessionId: json['sessionId'] as String?,
+      mediaUrl: json['mediaUrl'] as String?,
+      mediaAuthType: json['mediaAuthType'] as String? ?? 'none',
+      mediaAuthValue: json['mediaAuthValue'] as String?,
+      mediaUsername: json['mediaUsername'] as String?,
+      imageAction: json['imageAction'] as String? ?? 'sendImage',
+      videoAction: json['videoAction'] as String? ?? 'sendVideo',
+      documentAction: json['documentAction'] as String? ?? 'sendDocument',
+      audioAction: json['audioAction'] as String? ?? 'sendAudio',
     );
+  }
+
+  // Generate authorization header for media endpoint
+  String? getMediaAuthHeader() {
+    switch (mediaAuthType) {
+      case 'basic':
+        if (mediaUsername != null && mediaAuthValue != null) {
+          final credentials = '$mediaUsername:$mediaAuthValue';
+          final encoded = base64Encode(utf8.encode(credentials));
+          return 'Basic $encoded';
+        }
+        return null;
+      case 'bearer':
+        return mediaAuthValue != null ? 'Bearer $mediaAuthValue' : null;
+      case 'header':
+        return mediaAuthValue;
+      case 'none':
+      default:
+        return null;
+    }
   }
 
   // Generate authorization header based on authType
@@ -94,6 +146,14 @@ class Endpoint {
     int? timeout,
     DateTime? createdAt,
     String? sessionId,
+    String? mediaUrl,
+    String? mediaAuthType,
+    String? mediaAuthValue,
+    String? mediaUsername,
+    String? imageAction,
+    String? videoAction,
+    String? documentAction,
+    String? audioAction,
   }) {
     return Endpoint(
       id: id ?? this.id,
@@ -107,6 +167,14 @@ class Endpoint {
       timeout: timeout ?? this.timeout,
       createdAt: createdAt ?? this.createdAt,
       sessionId: sessionId ?? this.sessionId,
+      mediaUrl: mediaUrl ?? this.mediaUrl,
+      mediaAuthType: mediaAuthType ?? this.mediaAuthType,
+      mediaAuthValue: mediaAuthValue ?? this.mediaAuthValue,
+      mediaUsername: mediaUsername ?? this.mediaUsername,
+      imageAction: imageAction ?? this.imageAction,
+      videoAction: videoAction ?? this.videoAction,
+      documentAction: documentAction ?? this.documentAction,
+      audioAction: audioAction ?? this.audioAction,
     );
   }
 }

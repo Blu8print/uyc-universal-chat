@@ -17,7 +17,8 @@ class EndpointEditorScreen extends StatefulWidget {
   State<EndpointEditorScreen> createState() => _EndpointEditorScreenState();
 }
 
-class _EndpointEditorScreenState extends State<EndpointEditorScreen> {
+class _EndpointEditorScreenState extends State<EndpointEditorScreen>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _urlController = TextEditingController();
@@ -32,9 +33,28 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen> {
   String? _testResult;
   bool? _testSuccess;
 
+  late TabController _tabController;
+  late TextEditingController _mediaUrlController;
+  late TextEditingController _mediaAuthValueController;
+  late TextEditingController _mediaUsernameController;
+  late TextEditingController _imageActionController;
+  late TextEditingController _videoActionController;
+  late TextEditingController _documentActionController;
+  late TextEditingController _audioActionController;
+  String _mediaAuthType = 'none';
+
   @override
   void initState() {
     super.initState();
+    _mediaUrlController = TextEditingController(text: widget.endpoint?.mediaUrl ?? '');
+    _mediaAuthValueController = TextEditingController(text: widget.endpoint?.mediaAuthValue ?? '');
+    _mediaUsernameController = TextEditingController(text: widget.endpoint?.mediaUsername ?? '');
+    _imageActionController = TextEditingController(text: widget.endpoint?.imageAction ?? 'sendImage');
+    _videoActionController = TextEditingController(text: widget.endpoint?.videoAction ?? 'sendVideo');
+    _documentActionController = TextEditingController(text: widget.endpoint?.documentAction ?? 'sendDocument');
+    _audioActionController = TextEditingController(text: widget.endpoint?.audioAction ?? 'sendAudio');
+    _mediaAuthType = widget.endpoint?.mediaAuthType ?? 'none';
+    _tabController = TabController(length: 2, vsync: this);
     if (widget.endpoint != null) {
       _loadEndpoint(widget.endpoint!);
     }
@@ -59,6 +79,14 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen> {
     _authValueController.dispose();
     _initialMessageController.dispose();
     _timeoutController.dispose();
+    _tabController.dispose();
+    _mediaUrlController.dispose();
+    _mediaAuthValueController.dispose();
+    _mediaUsernameController.dispose();
+    _imageActionController.dispose();
+    _videoActionController.dispose();
+    _documentActionController.dispose();
+    _audioActionController.dispose();
     super.dispose();
   }
 
@@ -144,6 +172,14 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen> {
       initialMessage: _initialMessageController.text.isEmpty ? null : _initialMessageController.text,
       timeout: int.tryParse(_timeoutController.text) ?? 30,
       createdAt: widget.endpoint?.createdAt,
+      mediaUrl: _mediaUrlController.text.isEmpty ? null : _mediaUrlController.text,
+      mediaAuthType: _mediaAuthType,
+      mediaAuthValue: _mediaAuthValueController.text.isEmpty ? null : _mediaAuthValueController.text,
+      mediaUsername: _mediaUsernameController.text.isEmpty ? null : _mediaUsernameController.text,
+      imageAction: _imageActionController.text.isEmpty ? 'sendImage' : _imageActionController.text,
+      videoAction: _videoActionController.text.isEmpty ? 'sendVideo' : _videoActionController.text,
+      documentAction: _documentActionController.text.isEmpty ? 'sendDocument' : _documentActionController.text,
+      audioAction: _audioActionController.text.isEmpty ? 'sendAudio' : _audioActionController.text,
     );
 
     bool success;
@@ -198,159 +234,30 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen> {
               ),
             ),
 
-            // Form content
+            // Tab bar
+            Container(
+              color: const Color(0x1A000000),
+              child: TabBar(
+                controller: _tabController,
+                labelColor: AppColors.accent,
+                unselectedLabelColor: AppColors.textLight.withValues(alpha: 0.5),
+                indicatorColor: AppColors.accent,
+                tabs: const [
+                  Tab(text: 'Chat'),
+                  Tab(text: 'Media'),
+                ],
+              ),
+            ),
+
+            // Tab content
             Expanded(
               child: Form(
                 key: _formKey,
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
+                child: TabBarView(
+                  controller: _tabController,
                   children: [
-                    // Connection section
-                    _buildSectionTitle('CONNECTION', Icons.link),
-                    const SizedBox(height: 14),
-
-                    _buildTextField(
-                      controller: _nameController,
-                      label: 'Endpoint Name',
-                      hint: 'My Weather Bot',
-                      validator: (v) => v?.isEmpty ?? true ? 'Name required' : null,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildTextField(
-                      controller: _urlController,
-                      label: 'Webhook URL',
-                      hint: 'https://your-n8n.com/webhook/xxxxx/chat',
-                      mono: true,
-                      validator: (v) {
-                        if (v?.isEmpty ?? true) return 'URL required';
-                        if (!v!.startsWith('http')) return 'Must start with http:// or https://';
-                        return null;
-                      },
-                    ),
-
-                    const SizedBox(height: 8),
-                    Text(
-                      'The production Chat URL from your n8n Chat Trigger node',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
-                        color: AppColors.textLight.withValues(alpha: 0.4),
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // Authentication section
-                    _buildSectionTitle('AUTHENTICATION', Icons.lock),
-                    const SizedBox(height: 14),
-
-                    _buildDropdown(
-                      label: 'Auth Type',
-                      value: _authType,
-                      items: const [
-                        {'value': 'none', 'label': 'None (Public endpoint)'},
-                        {'value': 'basic', 'label': 'Basic Auth'},
-                        {'value': 'bearer', 'label': 'Bearer Token'},
-                        {'value': 'header', 'label': 'Custom Header'},
-                      ],
-                      onChanged: (v) => setState(() => _authType = v!),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Conditional auth fields
-                    if (_authType == 'basic') ...[
-                      _buildTextField(
-                        controller: _usernameController,
-                        label: 'Username',
-                        hint: 'user',
-                        validator: (v) => v?.isEmpty ?? true ? 'Username required' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _authValueController,
-                        label: 'Password',
-                        hint: '••••••••',
-                        obscure: true,
-                        validator: (v) => v?.isEmpty ?? true ? 'Password required' : null,
-                      ),
-                    ],
-
-                    if (_authType == 'bearer')
-                      _buildTextField(
-                        controller: _authValueController,
-                        label: 'Bearer Token',
-                        hint: 'your-token-here',
-                        mono: true,
-                        validator: (v) => v?.isEmpty ?? true ? 'Token required' : null,
-                      ),
-
-                    if (_authType == 'header')
-                      _buildTextField(
-                        controller: _authValueController,
-                        label: 'Custom Header',
-                        hint: 'X-API-Key: your-key-here',
-                        mono: true,
-                        validator: (v) {
-                          if (v?.isEmpty ?? true) return 'Header required';
-                          if (!v!.contains(':')) return 'Format: HeaderName: HeaderValue';
-                          return null;
-                        },
-                      ),
-
-                    const SizedBox(height: 28),
-
-                    // Settings section
-                    _buildSectionTitle('SETTINGS', Icons.settings),
-                    const SizedBox(height: 14),
-
-                    _buildToggle(
-                      label: 'Load Chat History',
-                      description: 'Restore previous messages on reconnect',
-                      value: _loadHistory,
-                      onChanged: (v) => setState(() => _loadHistory = v),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildTextField(
-                      controller: _timeoutController,
-                      label: 'Connection Timeout (seconds)',
-                      hint: '30',
-                      keyboardType: TextInputType.number,
-                      validator: (v) {
-                        final num = int.tryParse(v ?? '');
-                        if (num == null || num < 1) return 'Invalid timeout';
-                        return null;
-                      },
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _buildTextField(
-                      controller: _initialMessageController,
-                      label: 'Initial Message (optional)',
-                      hint: 'Hi! How can I help you today?',
-                    ),
-
-                    const SizedBox(height: 8),
-                    Text(
-                      'Shown as the first bot message when starting a new session',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
-                        color: AppColors.textLight.withValues(alpha: 0.4),
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // Test connection button
-                    _buildTestButton(),
-
-                    const SizedBox(height: 20),
+                    _buildChatTab(),
+                    _buildMediaTab(),
                   ],
                 ),
               ),
@@ -423,6 +330,250 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen> {
     );
   }
 
+  Widget _buildChatTab() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        _buildSectionTitle('CONNECTION', Icons.link),
+        const SizedBox(height: 14),
+        _buildTextField(
+          controller: _nameController,
+          label: 'Endpoint Name',
+          hint: 'My Weather Bot',
+          validator: (v) => v?.isEmpty ?? true ? 'Name required' : null,
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _urlController,
+          label: 'Webhook URL',
+          hint: 'https://your-n8n.com/webhook/xxxxx/chat',
+          mono: true,
+          validator: (v) {
+            if (v?.isEmpty ?? true) return 'URL required';
+            if (!v!.startsWith('http')) return 'Must start with http:// or https://';
+            return null;
+          },
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'The production Chat URL from your n8n Chat Trigger node',
+          style: TextStyle(
+            fontSize: 12,
+            fontStyle: FontStyle.italic,
+            color: AppColors.textLight.withValues(alpha: 0.4),
+          ),
+        ),
+        const SizedBox(height: 28),
+        _buildSectionTitle('AUTHENTICATION', Icons.lock),
+        const SizedBox(height: 14),
+        _buildDropdown(
+          label: 'Auth Type',
+          value: _authType,
+          items: const [
+            {'value': 'none', 'label': 'None (Public endpoint)'},
+            {'value': 'basic', 'label': 'Basic Auth'},
+            {'value': 'bearer', 'label': 'Bearer Token'},
+            {'value': 'header', 'label': 'Custom Header'},
+          ],
+          onChanged: (v) => setState(() => _authType = v!),
+        ),
+        const SizedBox(height: 16),
+        if (_authType == 'basic') ...[
+          _buildTextField(
+            controller: _usernameController,
+            label: 'Username',
+            hint: 'user',
+            validator: (v) => v?.isEmpty ?? true ? 'Username required' : null,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: _authValueController,
+            label: 'Password',
+            hint: '••••••••',
+            obscure: true,
+            validator: (v) => v?.isEmpty ?? true ? 'Password required' : null,
+          ),
+        ],
+        if (_authType == 'bearer')
+          _buildTextField(
+            controller: _authValueController,
+            label: 'Bearer Token',
+            hint: 'your-token-here',
+            mono: true,
+            validator: (v) => v?.isEmpty ?? true ? 'Token required' : null,
+          ),
+        if (_authType == 'header')
+          _buildTextField(
+            controller: _authValueController,
+            label: 'Custom Header',
+            hint: 'X-API-Key: your-key-here',
+            mono: true,
+            validator: (v) {
+              if (v?.isEmpty ?? true) return 'Header required';
+              if (!v!.contains(':')) return 'Format: HeaderName: HeaderValue';
+              return null;
+            },
+          ),
+        const SizedBox(height: 28),
+        _buildSectionTitle('SETTINGS', Icons.settings),
+        const SizedBox(height: 14),
+        _buildToggle(
+          label: 'Load Chat History',
+          description: 'Restore previous messages on reconnect',
+          value: _loadHistory,
+          onChanged: (v) => setState(() => _loadHistory = v),
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _timeoutController,
+          label: 'Connection Timeout (seconds)',
+          hint: '30',
+          keyboardType: TextInputType.number,
+          validator: (v) {
+            final num = int.tryParse(v ?? '');
+            if (num == null || num < 1) return 'Invalid timeout';
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _initialMessageController,
+          label: 'Initial Message (optional)',
+          hint: 'Hi! How can I help you today?',
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Shown as the first bot message when starting a new session',
+          style: TextStyle(
+            fontSize: 12,
+            fontStyle: FontStyle.italic,
+            color: AppColors.textLight.withValues(alpha: 0.4),
+          ),
+        ),
+        const SizedBox(height: 28),
+        _buildTestButton(),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildMediaTab() {
+    final hasMediaUrl = _mediaUrlController.text.isNotEmpty;
+    return StatefulBuilder(
+      builder: (context, setInnerState) {
+        return ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            _buildSectionTitle('MEDIA URL', Icons.perm_media),
+            const SizedBox(height: 14),
+            _buildTextField(
+              controller: _mediaUrlController,
+              label: 'Media Webhook URL (optional)',
+              hint: 'https://your-n8n.com/webhook/xxxxx/media',
+              mono: true,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            if (!hasMediaUrl)
+              Text(
+                'Attachments disabled — add a Media URL to enable.',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: AppColors.textLight.withValues(alpha: 0.4),
+                ),
+              )
+            else
+              Text(
+                'Separate endpoint for sending images, video, documents, and audio',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: AppColors.textLight.withValues(alpha: 0.4),
+                ),
+              ),
+            if (hasMediaUrl) ...[
+              const SizedBox(height: 28),
+              _buildSectionTitle('AUTHENTICATION', Icons.lock),
+              const SizedBox(height: 14),
+              _buildDropdown(
+                label: 'Auth Type',
+                value: _mediaAuthType,
+                items: const [
+                  {'value': 'none', 'label': 'None (Public endpoint)'},
+                  {'value': 'basic', 'label': 'Basic Auth'},
+                  {'value': 'bearer', 'label': 'Bearer Token'},
+                  {'value': 'header', 'label': 'Custom Header'},
+                ],
+                onChanged: (v) => setState(() => _mediaAuthType = v!),
+              ),
+              const SizedBox(height: 16),
+              if (_mediaAuthType == 'basic') ...[
+                _buildTextField(
+                  controller: _mediaUsernameController,
+                  label: 'Username',
+                  hint: 'user',
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _mediaAuthValueController,
+                  label: 'Password',
+                  hint: '••••••••',
+                  obscure: true,
+                ),
+              ],
+              if (_mediaAuthType == 'bearer')
+                _buildTextField(
+                  controller: _mediaAuthValueController,
+                  label: 'Bearer Token',
+                  hint: 'your-token-here',
+                  mono: true,
+                ),
+              if (_mediaAuthType == 'header')
+                _buildTextField(
+                  controller: _mediaAuthValueController,
+                  label: 'Custom Header',
+                  hint: 'X-API-Key: your-key-here',
+                  mono: true,
+                ),
+              const SizedBox(height: 28),
+              _buildSectionTitle('ACTION NAMES', Icons.code),
+              const SizedBox(height: 14),
+              _buildTextField(
+                controller: _imageActionController,
+                label: 'Image Action',
+                hint: 'sendImage',
+                mono: true,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _videoActionController,
+                label: 'Video Action',
+                hint: 'sendVideo',
+                mono: true,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _documentActionController,
+                label: 'Document Action',
+                hint: 'sendDocument',
+                mono: true,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _audioActionController,
+                label: 'Audio Action',
+                hint: 'sendAudio',
+                mono: true,
+              ),
+            ],
+            const SizedBox(height: 20),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildSectionTitle(String title, IconData icon) {
     return Row(
       children: [
@@ -456,6 +607,7 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen> {
     bool obscure = false,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
+    void Function(String)? onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -475,6 +627,7 @@ class _EndpointEditorScreenState extends State<EndpointEditorScreen> {
           obscureText: obscure,
           keyboardType: keyboardType,
           validator: validator,
+          onChanged: onChanged,
           style: TextStyle(
             fontSize: 15,
             color: AppColors.textLight,
