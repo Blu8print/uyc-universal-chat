@@ -2765,6 +2765,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _fetchChatTitle() async {
     if (_endpoint != null && mounted) {
       setState(() => _chatTitle = _endpoint!.name);
+      await SessionService.updateCurrentSession(title: _endpoint!.name);
     }
   }
 

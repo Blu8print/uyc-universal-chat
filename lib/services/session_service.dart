@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
@@ -26,6 +27,23 @@ class SessionService {
     _currentSessionId = _generateSessionId();
     debugPrint('[SessionService] Creating new session: $_currentSessionId');
     await _saveSessionId(_currentSessionId!);
+
+    // Create session metadata and add to list
+    final now = DateTime.now().toIso8601String();
+    final sessionData = SessionData(
+      sessionId: _currentSessionId!,
+      title: 'New Chat',
+      description: '',
+      createdAt: now,
+      lastActivity: now,
+      chatType: chatType,
+    );
+    _currentSessionData = sessionData;
+    _sessionList.removeWhere((s) => s.sessionId == _currentSessionId);
+    _sessionList.insert(0, sessionData);
+    await StorageService.saveSessionData(sessionData);
+    await StorageService.saveSessionList(_sessionList);
+
     return _currentSessionId!;
   }
 
@@ -89,12 +107,50 @@ class SessionService {
     }
   }
 
-  // Stubbed — will be replaced by Drift implementation
   static Future<bool> updateCurrentSession({
     String? title,
     String? description,
     List<Map<String, dynamic>>? messages,
-  }) async => false;
+  }) async {
+    if (_currentSessionId == null) return false;
+
+    final existing = _currentSessionData ??
+        SessionData(sessionId: _currentSessionId!, title: 'New Chat', description: '');
+
+    final messagesJson = messages != null ? jsonEncode(messages) : existing.messages;
+    final messageCount = messages?.length ?? existing.messageCount;
+
+    final updated = SessionData(
+      sessionId: existing.sessionId,
+      title: title ?? existing.title,
+      description: description ?? existing.description,
+      thumbnail: existing.thumbnail,
+      lastActivity: DateTime.now().toIso8601String(),
+      messageCount: messageCount,
+      createdAt: existing.createdAt,
+      chatType: existing.chatType,
+      emailSent: existing.emailSent,
+      userId: existing.userId,
+      companyName: existing.companyName,
+      userName: existing.userName,
+      messages: messagesJson,
+      phoneNumber: existing.phoneNumber,
+      isOwner: existing.isOwner,
+      isPinned: existing.isPinned,
+    );
+
+    _currentSessionData = updated;
+    final idx = _sessionList.indexWhere((s) => s.sessionId == _currentSessionId);
+    if (idx >= 0) {
+      _sessionList[idx] = updated;
+    } else {
+      _sessionList.insert(0, updated);
+    }
+
+    await StorageService.saveSessionData(updated);
+    await StorageService.saveSessionList(_sessionList);
+    return true;
+  }
 
   // Stubbed — will be replaced by Drift implementation
   static Future<void> markCurrentSessionEmailSent() async {}
